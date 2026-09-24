@@ -157,6 +157,8 @@ README.md  PLAN.md  TASKS.md  LICENSE
 
 ### T0.1 · Proyecto y API key sin billing — AB · 15 min · P0
 
+**Estado:** ✅ Completo
+
 **Funcional:** tener credenciales de Gemini que nunca generen cobros.
 
 **Técnico:**
@@ -168,6 +170,8 @@ README.md  PLAN.md  TASKS.md  LICENSE
 **Listo cuando:** ambos tienen la key y el proyecto figura en tier Free.
 
 ### T0.2 · Relevar cuotas + prueba cualitativa — A · 20 min · P0 · depende de T0.1
+
+**Estado:** ✅ Completo
 
 **Funcional:** saber cuántas salas simultáneas y cuántas horas por día soporta el free tier.
 
@@ -183,6 +187,8 @@ README.md  PLAN.md  TASKS.md  LICENSE
 **Listo cuando:** la tabla de cuotas está completa en `PLAN.md`.
 
 ### T0.3 · Decidir Camino 1 o 2 — AB · 5 min · P0 · depende de T0.2
+
+**Estado:** ✅ Completo — Camino 1 (`ENGINE=live_translate`), ver `PLAN.md §8`
 
 **Técnico:** aplicar la tabla de decisión de `PLAN.md` §2.3:
 - live-translate con ≥ 2 sesiones concurrentes y cupo diario suficiente → **Camino 1** (`ENGINE=live_translate`).

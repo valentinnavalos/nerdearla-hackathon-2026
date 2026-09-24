@@ -367,7 +367,7 @@ No hay presentación en vivo: el video \+ el Devpost son el pitch.
 
 ## 8\. Pendiente
 
-- [ ] Resultado del chequeo de H0: sesiones concurrentes y RPD de los 4 modelos → confirmar Camino 1 o 2\.
+- [x] Decisión de camino (T0.3): **Camino 1 — `live-translate`** (`ENGINE=live_translate`, modelo `gemini-3.5-live-translate-preview`). Implementado y probado en `backend/engine/live_translate.py`.
 
 ---
 
