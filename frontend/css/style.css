@@ -1,1 +1,149 @@
-/* placeholder — ver T1.12 */
+/* Mobile-first. Captions are always on a dark background (easier to read in a dim room). */
+
+:root {
+  --bg: #0b0d10;
+  --surface: #161a20;
+  --border: #262c35;
+  --text: #f2f4f7;
+  --muted: #9aa4b2;
+  --interim: #8d97a5;
+  --accent: #4cc38a;
+  --warn: #f5a524;
+  --danger: #f46a6a;
+  --caption-size: 2.2rem;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; } /* beats the display rules below */
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+body { overflow-x: hidden; }
+
+button, .btn {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-height: 44px; /* touch target */
+  padding: 0 14px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+button:hover, .btn:hover { border-color: var(--muted); }
+button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+/* --- room list --- */
+
+.list-view { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+.brand h1 { font-size: 1.75rem; margin: 0 0 4px; }
+.brand .sub { margin: 0 0 24px; color: var(--muted); }
+
+.rooms { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.room-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+.room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.room-name { font-size: 1.2rem; font-weight: 600; overflow-wrap: anywhere; }
+.speaker { color: var(--muted); }
+.room-langs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.room-langs .btn { flex: 1 1 120px; font-weight: 600; }
+
+.badge {
+  flex: none;
+  font-size: 0.8rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.status-running, .status-rotating { color: var(--accent); border-color: var(--accent); }
+.status-reconnecting { color: var(--warn); border-color: var(--warn); }
+.status-error { color: var(--danger); border-color: var(--danger); }
+
+.empty { color: var(--muted); text-align: center; margin-top: 32px; }
+
+/* --- caption view --- */
+
+.caption-view { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+.bar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 16px;
+  padding-top: max(8px, env(safe-area-inset-top));
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.icon-btn { min-width: 44px; padding: 0 10px; }
+.back { font-size: 1.2rem; }
+.room { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; }
+.room-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn { font-size: 0.85rem; color: var(--muted); }
+.conn.live { color: var(--accent); }
+.conn-reconnecting { color: var(--warn); }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.lang-toggle { display: inline-flex; }
+.lang-toggle button { border-radius: 0; }
+.lang-toggle button:first-child { border-radius: 10px 0 0 10px; }
+.lang-toggle button:last-child { border-radius: 0 10px 10px 0; border-left: 0; }
+
+.notice {
+  margin: 12px 16px 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.captions {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden; /* with flex-end, overflow is clipped at the top: the newest line always shows */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* newest line sits at the bottom */
+  gap: 0.35em;
+  padding: 16px 16px max(24px, env(safe-area-inset-bottom));
+  font-size: var(--caption-size);
+  line-height: 1.25;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.line { margin: 0; max-width: 32ch; }
+.line:not(:last-child) { opacity: 0.7; }
+.line.interim { color: var(--interim); font-style: italic; font-weight: 500; }
+
+/* high contrast: pure black/white, no dimming */
+body.contrast { --bg: #000; --surface: #000; --border: #fff; --text: #fff; --interim: #d0d0d0; }
+body.contrast .line:not(:last-child) { opacity: 1; }
+body.contrast .captions { font-weight: 700; }
+
+@media (min-width: 768px) {
+  .line { max-width: 40ch; }
+}

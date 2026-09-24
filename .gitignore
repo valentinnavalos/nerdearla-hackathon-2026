@@ -6,3 +6,5 @@ __pycache__/
 data/
 samples/*
 !samples/.gitkeep
+!samples/replay_demo.jsonl
+!samples/*.mp3

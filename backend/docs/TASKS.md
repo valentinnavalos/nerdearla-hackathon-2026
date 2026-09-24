@@ -6,6 +6,7 @@
 **Dueños:** **A** = motor / backend Python · **B** = web / deploy · **AB** = ambos
 **Prioridad:** **P0** = MVP intocable · **P1** = importante para el jurado · **P2** = stretch (se recorta primero)
 **Tiempos:** relativos al arranque (H0). Checkpoints de sincronización: **H3.5**, **H8**, **H12.5**.
+**Estado:** ✅ completo · 🟡 hecho, falta validar (ver la nota de la tarea) · ⛔ bloqueado · ➖ no aplica
 
 ---
 
@@ -18,30 +19,33 @@
 | T0.3 | Decidir Camino 1 o 2 | AB | 5 min | P0 | 0 | ✅ |
 | T0.4 | Estructura del repo, `.env.example`, Makefile | B | 20 min | P0 | 0 | ✅ |
 | T0.5 | Congelar contratos (evento, Engine, endpoints) | AB | 20 min | P0 | 0 | ✅ |
-| T1.1 | Fix `FileSource`: productor/consumidor, pacing, loop | A | 25 min | P0 | 1 | |
-| T1.2 | Actualizar `google-genai` y verificar features | A | 10 min | P0 | 1 | |
-| T1.3 | `LiveSessionRunner` v0 + CLI | A | 45 min | P0 | 1 | |
-| T1.4 | Spike de mediciones | A | 30 min | P0 | 1 | |
-| T1.5 | Engine del camino elegido | A | 45 min | P0 | 1 | |
-| T1.6 | Traductor local Argos (solo Camino 2) | A | 30 min | P0* | 1 | |
-| T1.7 | Módulo de glosario | A | 20 min | P0 | 1 | |
-| T1.8 | Esqueleto FastAPI + config | B | 20 min | P0 | 1 | |
-| T1.9 | `SessionManager` + `Session` + pub/sub | B | 40 min | P0 | 1 | |
-| T1.10 | `ReplayEngine` + jsonl de ejemplo | B | 20 min | P0 | 1 | |
-| T1.11 | WS de captions | B | 20 min | P0 | 1 | |
-| T1.12 | Página de audiencia v0 | B | 40 min | P0 | 1 | |
-| T1.13 | Dockerfile HF + primer deploy | B | 40 min | P0 | 1 | |
-| T1.14 | Integración checkpoint H3.5 | AB | 15 min | P0 | 1 | |
+| T1.1 | Fix `FileSource`: productor/consumidor, pacing, loop | A | 25 min | P0 | 1 | ✅ |
+| T1.2 | Actualizar `google-genai` y verificar features | A | 10 min | P0 | 1 | ✅ |
+| T1.3 | `LiveSessionRunner` v0 + CLI | A | 45 min | P0 | 1 | ✅ |
+| T1.4 | Spike de mediciones | A | 30 min | P0 | 1 | ✅ |
+| T1.5 | Engine del camino elegido | A | 45 min | P0 | 1 | ✅ |
+| T1.6 | Traductor local Argos (solo Camino 2) | A | 30 min | P0* | 1 | ➖ |
+| T1.7 | Módulo de glosario | A | 20 min | P0 | 1 | ✅ |
+| T1.8 | Esqueleto FastAPI + config | B | 20 min | P0 | 1 | ✅ |
+| T1.9 | `SessionManager` + `Session` + pub/sub | B | 40 min | P0 | 1 | ✅ |
+| T1.10 | `ReplayEngine` + jsonl de ejemplo | B | 20 min | P0 | 1 | ✅ |
+| T1.11 | WS de captions | B | 20 min | P0 | 1 | ✅ |
+| T1.12 | Página de audiencia v0 | B | 40 min | P0 | 1 | 🟡 |
+| T1.13 | Dockerfile HF + primer deploy | B | 40 min | P0 | 1 | 🟡 |
+| T1.14 | Integración checkpoint H3.5 | AB | 15 min | P0 | 1 | 🟡 |
 | T2.1 | Rotación + resiliencia del runner | A | 1.5 h | P0 | 2 | |
 | T2.2 | Aislamiento multi-sala | A | 25 min | P0 | 2 | |
-| T2.3 | Persistencia (`captions.jsonl`, `meta.json`) | A | 20 min | P0 | 2 | |
+| T2.3 | Persistencia (`captions.jsonl`, `meta.json`) | A | 20 min | P0 | 2 | 🟡 |
 | T2.4 | Métricas: nivel, silencio, latencia, cuota | A | 50 min | P1 | 2 | |
 | T2.5 | API de administración + auth | A | 35 min | P0 | 2 | |
 | T2.6 | WS de ingesta de audio (backend del mic) | B | 25 min | P0 | 2 | |
 | T2.7 | Captura de mic con AudioWorklet | B | 1.3 h | P0 | 2 | |
 | T2.8 | Vista de escenario (captura + subtítulos + QR) | B | 50 min | P0 | 2 | |
 | T2.9 | Consola de operador | B | 50 min | P0 | 2 | |
-| T2.10 | Prueba integrada 2 salas × 20 min | AB | 30 min | P0 | 2 | |
+| T2.10a | 2 sesiones Live aisladas (probe) | A | 15 min | P0 | 2 | ✅ |
+| T2.10b | 2 salas con el backend completo, 2–3 min | AB | 15 min | P0 | 2 | |
+| T2.10c | 2 salas × 20 min en el Space | AB | 30 min | P0 | 2 | |
+| T2.10d | Rotación/reanudación con 2 salas | A | 20 min | P0 | 2 | |
 | T2.11 | Video de emergencia | AB | 30 min | P0 | 2 | |
 | T3.1 | Modo overlay para OBS/vMix | B | 35 min | P1 | 3 | |
 | T3.2 | Panel de monitoreo | B | 1 h | P1 | 3 | |
@@ -63,7 +67,7 @@
 
 \* T1.6 es P0 solo si se elige el Camino 2; si es Camino 1, no se hace.
 
-**Camino crítico:** T0.1 → T0.5 → T1.3 → T1.5 → T1.14 → T2.1 → T2.10 → T4.1 → T4.4 → T4.5.
+**Camino crítico:** T0.1 → T0.5 → T1.3 → T1.5 → T1.14 → T2.10a → T2.1 → T2.10c → T4.1 → T4.4 → T4.5.
 Todo lo de B corre en paralelo gracias a `ReplayEngine` (T1.10), que simula el motor.
 
 ---
@@ -153,7 +157,7 @@ README.md  PLAN.md  TASKS.md  LICENSE
 
 ---
 
-## Fase 0 — Preparación (H0 → H0.75)
+## Fase 0 — Preparación (H0 → H0.75) ✅ Completa
 
 ### T0.1 · Proyecto y API key sin billing — AB · 15 min · P0
 
@@ -276,6 +280,8 @@ class Engine(ABC):
 
 #### T1.1 · Fix `FileSource` — A · 25 min · P0
 
+**Estado:** ✅ Completo — `FrameQueue` + `pump` en `sources/base.py` (descarta el frame más viejo y cuenta `dropped_frames`); `tests/test_file_source.py`. El mp3 de 3 min con un engine 1,5× más lento que tiempo real se procesa en 180,2 s (criterio 3:00 ± 2 s; `dropped_frames=581`).
+
 **Funcional:** simular una charla en vivo a velocidad real, sin que el motor la frene, y poder repetirla para pruebas largas.
 
 **Técnico:**
@@ -288,6 +294,8 @@ class Engine(ABC):
 
 #### T1.2 · Actualizar `google-genai` — A · 10 min · P0
 
+**Estado:** ✅ Completo — `google-genai==2.25.0` ya es la última versión; campos verificados en `tests/test_genai_features.py`.
+
 **Técnico:**
 - `pip install -U google-genai` y fijar la versión exacta en `requirements.txt`.
 - Verificar que existen `types.TranslationConfig`, `types.AudioTranscriptionConfig(custom_vocabulary=..., mode=...)` y el campo `interim_input_transcription`:
@@ -299,6 +307,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 **Listo cuando:** versión fijada y el chequeo imprime los campos esperados.
 
 #### T1.3 · `LiveSessionRunner` v0 + CLI — A · 45 min · P0 · depende de T1.1, T1.2
+
+**Estado:** ✅ Completo — runner: termina cuando el servidor queda en silencio (drain de 3 s, tope 30 s), propaga el cierre de la sesión y tiene hook `on_raw`; CLI con `SessionContext` y la factory `engine/factory.py`. Validado: `samples/en_talk_3min.mp3` sale por consola con original y traducción (36 finales EN, 64 ES, `dropped_frames=0`).
 
 **Funcional:** mantener una conexión Live con Gemini por sala, enviando audio y recibiendo transcripciones.
 
@@ -319,6 +329,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 
 #### T1.4 · Spike de mediciones — A · 30 min · P0 · depende de T1.3
 
+**Estado:** ✅ Completo — las 6 respuestas están en el README ("Mediciones (T1.4)"). Lo importante: fragmentos **delta**, sin interim ni `finished`; latencia del original ~0,5 s; `GoAway` a los 9:00 con 50 s de margen y corte a los 9:50 (`1008`); la traducción EN → ES tiene frenazos; con 2 sesiones simultáneas, la segunda casi no recibía respuesta; T2.10a mostró que lo que degrada es **abrir sesiones enseguida de otras**, no la concurrencia en sí.
+
 **Funcional:** decidir con datos, no con supuestos.
 
 **Técnico:** medir y anotar en la tabla del README:
@@ -332,6 +344,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 **Listo cuando:** las 6 respuestas están en el README.
 
 #### T1.5 · Engine del camino elegido — A · 45 min · P0 · depende de T1.4
+
+**Estado:** ✅ Completo — `core/segmenter.py` (modo delta, confirmado en T1.4; `tests/test_segmenter.py`), dos segmentadores en `live_translate.py`, `ChunkedEngine` (fallback A, prompt EN↔ES en español neutro, sin thinking). Validado con los dos mp3: interim/final coherentes y `seg` creciente. Pendiente de ajuste: subir `idle_s` de 1,2 a ~2 s (ver README).
 
 **Funcional:** convertir la salida cruda de Gemini en `CaptionEvent` para los dos idiomas.
 
@@ -351,6 +365,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 
 #### T1.6 · Traductor local Argos (solo Camino 2) — A · 30 min · P0\*
 
+**Estado:** ➖ N/A — se eligió el Camino 1.
+
 **Funcional:** traducir gratis y sin límite de requests.
 
 **Técnico:**
@@ -362,6 +378,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 **Listo cuando:** traduce 20 frases de la charla con < 500 ms por frase y los términos del glosario intactos.
 
 #### T1.7 · Módulo de glosario — A · 20 min · P0
+
+**Estado:** ✅ Completo — `merge`, `parse_text`, límites de palabra que aceptan `C++`/`Node.js`; `tests/test_glossary.py` (7 casos).
 
 **Funcional:** que los términos técnicos y nombres propios salgan bien escritos.
 
@@ -386,6 +404,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 
 #### T1.8 · Esqueleto FastAPI + config — B · 20 min · P0
 
+**Estado:** ✅ Completo — `config.py` (`Settings`), `app.py` (lifespan, routers, estáticos), logging `HH:MM:SS LEVEL [sesión] mensaje`.
+
 **Técnico:**
 - `config.py` con `pydantic-settings` leyendo las variables de la tabla.
 - `app.py`: crea la app, monta `frontend/` como estáticos en `/`, incluye routers, `GET /healthz` → `{"ok": true, "engine": ENGINE}`.
@@ -395,6 +415,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 **Listo cuando:** `make dev` sirve `/healthz` y un `index.html` de prueba.
 
 #### T1.9 · `SessionManager` + `Session` + pub/sub — B · 40 min · P0 · depende de T0.5
+
+**Estado:** ✅ Completo — `core/session.py`, `core/manager.py`; `tests/test_session.py`.
 
 **Funcional:** cada sala es independiente; los subtítulos llegan solo a quien mira esa sala y ese idioma.
 
@@ -409,6 +431,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 
 #### T1.10 · `ReplayEngine` + jsonl de ejemplo — B · 20 min · P0
 
+**Estado:** ✅ Completo — `engine/replay.py` (pacing por `t1`, loop con `seg` desplazado) + `samples/replay_demo.jsonl`.
+
 **Funcional:** simular el motor sin API (para desarrollar el front, para grabar el video y para jurados sin key).
 
 **Técnico:**
@@ -419,6 +443,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 
 #### T1.11 · WS de captions — B · 20 min · P0 · depende de T1.9
 
+**Estado:** ✅ Completo — `/ws/captions/{id}?lang=`: estado + historial + vivo; 4404/4400; `tests/test_ws.py` y cliente WS real contra el contenedor.
+
 **Técnico:**
 - `/ws/captions/{id}?lang=es`: al conectar, enviar el historial de finales de ese idioma y después los eventos en vivo como JSON.
 - Si la sala no existe: cerrar con código 4404.
@@ -428,6 +454,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 **Listo cuando:** `websocat` (o una página de prueba) recibe historial + eventos del replay.
 
 #### T1.12 · Página de audiencia v0 — B · 40 min · P0 · depende de T1.11
+
+**Estado:** 🟡 Hecha — probada en Chromium headless con viewport de celular: lista, interim → final, cambio de idioma sin recargar, A−/A+, alto contraste, reconexión con backoff, sala inexistente. Falta probarla desde un celular real (después del deploy).
 
 **Funcional:** cada persona elige sala e idioma y lee subtítulos en su celular.
 
@@ -443,6 +471,8 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 **Listo cuando:** desde el celular, con `ENGINE=replay`, se ven los subtítulos y se puede cambiar de idioma.
 
 #### T1.13 · Dockerfile HF + primer deploy — B · 40 min · P0
+
+**Estado:** 🟡 Dockerfile listo y probado en local (`make docker-build/test/run`); frontmatter en el README; `make deploy` usa `hf upload`. Falta crear el Space, cargar los secrets y deployar.
 
 **Funcional:** que cualquiera pueda deployar con "Duplicate this Space".
 
@@ -474,6 +504,8 @@ license: mit
 
 #### T1.14 · Integración checkpoint H3.5 — AB · 15 min · P0
 
+**Estado:** 🟡 Validado en local — con `ENGINE=live_translate` y `DEMO_FILE=samples/es_talk_2min.mp3`, dos clientes WS (`?lang=es` y `?lang=en`) recibieron subtítulos solo de su idioma (26 y 24 finales, primer texto a los ~3,5 s, `STOPPED` al final). Falta repetirlo en el Space desde un celular (T1.13).
+
 **Técnico:** conectar el engine real de A dentro de `Session`; sala creada por código con un mp3 de `samples/`; deploy.
 
 **Listo cuando:** **mp3 → Space → subtítulos en el celular, en los dos idiomas.** Si no se llega, `ENGINE=chunked` y se sigue.
@@ -484,20 +516,23 @@ license: mit
 
 ### Track A
 
-#### T2.1 · Rotación + resiliencia del runner — A · 1.5 h · P0 · depende de T1.4
+#### T2.1 · Rotación + resiliencia del runner — A · 1.5 h · P0 · depende de T1.4, T2.10a
 
 **Funcional:** una charla de 40 min se subtitula sin cortes visibles aunque Gemini cierre la conexión cada ~10 min.
 
-**Técnico:**
-- **Rotación preventiva** a los `ROTATE_AFTER_S` (540 s) o al recibir `GoAway` (lo que ocurra primero). Estado de la sala: `ROTATING`.
-- **Secuencial:** cerrar la sesión vieja → abrir la nueva (nunca dos abiertas a la vez: no duplica el cupo).
-- **Ring buffer:** `collections.deque` con los últimos 2,5 s de frames; al abrir la sesión nueva, reenviarlo primero y después seguir con audio en vivo. Durante la reconexión, los frames nuevos se acumulan en el buffer (se pierde lo que exceda 2,5 s).
-- **Dedupe** (`core/dedupe.py`): `dedupe_overlap(prev_tail: str, new: str) -> str`. Toma las últimas ~15 palabras de los finales previos y quita del principio de `new` el prefijo más largo que coincida (normalizando mayúsculas y puntuación). Con tests.
-- **Errores:** ante excepción de red o 429, reintentar con backoff exponencial + jitter (1, 2, 4, 8, 16, máximo 30 s). Estado `RECONNECTING`. Después de 10 fallos seguidos: `ERROR` (visible en el panel), la sala no se cae del todo y se puede reintentar desde la consola.
-- **Semáforo de proceso** `asyncio.Semaphore(MAX_CONCURRENT_LIVE)`: ninguna sala abre una sesión Live si no hay cupo; queda en `RECONNECTING` hasta que se libere.
-- Contadores: `rotations`, `reconnects`, `errors`, `last_error`, `live_sessions_opened_today`.
+**Contexto (T1.4 + docs de *session management*):** la **conexión** dura ~10 min (`GoAway` a los 9:00 con `time_left=50s`, corte a los 9:50 con `1008` si no se cierra). La **sesión** solo de audio dura 15 min sin compresión y se extiende con `context_window_compression`. El servidor manda `session_resumption_update` (~1/s, `resumable: true`, handle válido 2 h).
 
-**Listo cuando:** corrida de 25 min en loop con ≥ 2 rotaciones: sin caídas, sin frases duplicadas visibles y con huecos < 3 s.
+**Técnico:**
+- **Reanudación como camino principal** (probada en T2.10a: 1,3 s de hueco, sin repetir texto; además evita abrir sesiones nuevas, que es lo que degrada el servicio): conectar con `session_resumption=types.SessionResumptionConfig()` (probar `transparent=True`), guardar el último `new_handle` (`runner.stats["resumption_handle"]` ya lo registra). A los `ROTATE_AFTER_S` (540 s) o al recibir `GoAway`, lo que ocurra primero: cerrar y reconectar con `SessionResumptionConfig(handle=...)`. Estado de la sala: `ROTATING`.
+- **Sesiones de más de 15 min:** `context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow())`. Verificar primero que live-translate lo acepta (la doc del modelo no lo menciona).
+- **Secuencial:** nunca dos conexiones de la misma sala a la vez (no duplica el cupo).
+- **Audio durante la reconexión:** los frames se siguen acumulando y salen apenas conecta. Con `transparent=True`, `last_consumed_client_message_index` indica desde dónde reenviar; sin eso, reenviar solo lo que no se llegó a mandar.
+- **Fallback si la reanudación falla** (handle vencido o rechazado): sesión nueva + ring buffer de 2,5 s (`collections.deque`) + **dedupe** (`core/dedupe.py`: `dedupe_overlap(prev_tail, new)`, quita del principio de `new` el prefijo más largo que coincida con las últimas ~15 palabras, normalizando mayúsculas y puntuación; con tests).
+- **Errores:** ante excepción de red o 429, reintentar con backoff exponencial + jitter (1, 2, 4, 8, 16, máximo 30 s). Estado `RECONNECTING`. Después de 10 fallos seguidos: `ERROR` (visible en el panel), la sala no se cae del todo y se puede reintentar desde la consola.
+- **Guardia de capacidad** (hecha, `SessionManager`): cada sala con Live toma un cupo al arrancar y lo suelta al terminar; con `MAX_CONCURRENT_LIVE` ocupado, el Start de otra sala da `CapacityError` en vez de encolar. Las rotaciones y reconexiones usan el cupo de su propia sala y nunca esperan. `MAX_CONCURRENT_LIVE=2` según T2.10a (2 andan desde frío), a confirmar en AI Studio. Evitar abrir sesiones nuevas de más (reintentos rápidos, rotación sin reanudar): con sesiones recientes, la nueva sale degradada.
+- Contadores: `rotations`, `resumptions`, `fresh_sessions`, `reconnects`, `errors`, `last_error`, `live_sessions_opened_today`.
+
+**Listo cuando:** corrida de 25 min en loop con ≥ 2 rotaciones: sin caídas, sin frases duplicadas visibles y con huecos < 3 s; el log dice si cada rotación fue reanudación o sesión nueva.
 
 #### T2.2 · Aislamiento multi-sala — A · 25 min · P0 · depende de T2.1
 
@@ -509,8 +544,11 @@ license: mit
 
 #### T2.3 · Persistencia — A · 20 min · P0
 
+**Estado:** 🟡 `captions.jsonl` hecho con escritor asíncrono (`core/persistence.py`: cola por sala + `asyncio.to_thread`; `tests/test_session.py` prueba que un disco lento no frena a ninguna sala). Falta `meta.json` y la recarga al reiniciar.
+
 **Técnico:**
 - `DATA_DIR/sessions/<id>/captions.jsonl`: solo eventos **finales**, una línea por evento, append + flush.
+- **Nunca en el camino de recepción:** `Session.emit` encola y una tarea escritora hace el append + flush (el receptor del runner no puede esperar al disco; `runner.stats["dispatch_ms_max"]` lo controla).
 - `meta.json`: título, orador, idiomas, engine, glosario, `started_at`, `stopped_at`, estado del Knowledge Pack, URL de NotebookLM (si existe).
 - Al reiniciar el proceso: cargar las sesiones terminadas desde disco (para que sigan visibles sus exports).
 
@@ -528,6 +566,7 @@ license: mit
 - **Latencia del final:** tiempo entre fin de voz y el siguiente final.
 - p50 / p95 sobre las últimas 200 muestras (`deque`).
 - **Frames:** `last_frame_age_s`, `dropped_frames`.
+- **Runner:** exponer `engine.runner.stats` (ya existe: `connect_ms`, `frames_sent`, `msgs`, `first_text_s`, `last_msg_at`, `go_away_time_left`, `generation_complete`, `dispatch_ms_max`) y la edad del último mensaje de Gemini, para detectar una sesión que conecta pero no responde (lo que se vio en T1.4).
 - **Cuota:** contador de sesiones Live abiertas hoy, persistido en `DATA_DIR/quota.json`, que se reinicia a medianoche hora del Pacífico (igual que el RPD de Google).
 - Oyentes conectados por idioma (desde el `SessionManager`).
 
@@ -543,6 +582,7 @@ license: mit
 - `POST /api/uploads`: multipart, solo `audio/*`, máximo 100 MB, se guarda en `DATA_DIR/uploads/`; devuelve el nombre para usar en `file`.
 - `GET /api/sessions`: estado completo + métricas (para el panel).
 - Validaciones con errores claros (400/404/409).
+- `CapacityError` del `SessionManager` (cupo Live lleno) → **409** con el mensaje tal cual.
 
 **Listo cuando:** sin token → 401; con token se crean, arrancan y paran salas desde `curl`.
 
@@ -601,7 +641,25 @@ license: mit
 
 ### Conjuntas
 
-#### T2.10 · Prueba integrada 2 salas × 20 min — AB · 30 min · P0
+#### T2.10 · Prueba de 2 salas, en 4 pasos — AB · P0
+
+"Dos sesiones conectadas" no es lo mismo que "dos salas funcionando 20 minutos": se valida por capas y cada paso habilita el siguiente.
+
+##### T2.10a · 2 sesiones Live aisladas — A · 15 min
+
+**Estado:** ✅ Completo — `scripts/live_probe.py` (SDK crudo, sin backend, N sesiones con `asyncio.gather`; log por sesión de conexión, primera respuesta, tipos de mensaje, `GoAway`, `generation_complete`, errores y cierre). Resultado (tabla en el README): **2 sesiones simultáneas andan bien desde frío**; si se abren enseguida de otras sesiones, una se degrada (3–7× más lenta); la **reanudación con handle funciona** (1,3 s de hueco, sin repetir texto). Con **nuestro runner/engine** (`scripts/runner_probe.py`, 2 salas EN + ES en un proceso, en frío) también anduvieron las dos: primer texto a 4,1 y 3,3 s, ~8 msgs/s, 0 frames perdidos, callbacks ≤ 1,4 ms. No se probó transcribe-live: no hizo falta. Queda mirar el cupo en AI Studio.
+
+**Técnico:** línea base de 1 sesión → 2 simultáneas × 3 → 2 escalonadas 10 s → 2 con `gemini-3.5-transcribe-live` → `--resume`. Intercalar líneas base entre pruebas (el rendimiento de una sola sesión varía en el día). Mirar en paralelo AI Studio → Rate limits.
+
+**Listo cuando:** está claro si el proyecto sostiene 2 sesiones (y con qué modelo), y `MAX_CONCURRENT_LIVE` queda fijado con ese dato.
+
+##### T2.10b · 2 salas con el backend completo, 2–3 min — AB · 15 min · depende de T2.10a, T2.5
+
+**Técnico:** en local, 2 salas creadas por la API (una EN, una ES), con clientes WS de los dos idiomas en cada una. Arrancar tras unos minutos sin uso de la API (ver T2.10a) y registrar `runner.stats` de cada sala.
+
+**Listo cuando:** las 2 salas entregan subtítulos en ambos idiomas y ninguna afecta a la otra.
+
+##### T2.10c · 2 salas × 20+ min en el Space — AB · 30 min · depende de T2.10b, T2.1
 
 **Técnico:** en el Space (no en local):
 - Sala 1: mic en español (una persona habla o se reproduce el mp3 en ES por parlante).
@@ -610,6 +668,12 @@ license: mit
 - Anotar bugs y resolver los bloqueantes antes de seguir.
 
 **Listo cuando:** checklist completo.
+
+##### T2.10d · Rotación/reanudación con 2 salas concurrentes — A · 20 min · depende de T2.10c
+
+**Técnico:** forzar la rotación de las 2 salas cerca del mismo minuto (`ROTATE_AFTER_S` bajo) y verificar que el semáforo y la reanudación no dejen a ninguna sala sin sesión.
+
+**Listo cuando:** 3 rotaciones seguidas por sala, con las 2 salas activas, sin huecos > 3 s.
 
 #### T2.11 · Video de emergencia — AB · 30 min · P0
 
@@ -640,7 +704,7 @@ license: mit
 **Técnico:**
 - Sección en `admin.html`, alimentada por `/ws/admin` (snapshot cada 1 s).
 - Por sala: estado (color), fuente, tiempo activo, nivel de mic + antigüedad del último frame, alerta de silencio, latencia p50/p95 (parcial y final), rotaciones, reconexiones, último error, oyentes por idioma.
-- Global: sesiones Live abiertas vs. `MAX_CONCURRENT_LIVE`, sesiones hoy vs. `QUOTA_LIVE_SESSIONS_PER_DAY`, costo acumulado **USD 0**.
+- Global: sesiones Live abiertas vs. `MAX_CONCURRENT_LIVE` (`manager.live_usage()`), sesiones hoy vs. `QUOTA_LIVE_SESSIONS_PER_DAY`, costo acumulado **USD 0**.
 - Resaltar en rojo: `ERROR`, silencio, mic desconectado, cuota > 80%.
 
 **Listo cuando:** desenchufar el mic (o parar el envío) se refleja en el panel en < 5 s.
@@ -786,7 +850,7 @@ license: mit
 - Permiso de mic denegado → aviso en la vista de escenario.
 - Archivo que no es audio → 400 en la consola.
 - Sala inexistente en la audiencia → mensaje "Sala no encontrada".
-- Repetir la prueba de 2 salas × 20 min después del último merge.
+- Repetir la prueba de 2 salas × 20 min (T2.10c) después del último merge.
 
 **Listo cuando:** todos los casos probados.
 
@@ -821,4 +885,4 @@ license: mit
 3. Quiz dentro de T3.4/T3.5 (quedan resumen + preguntas).
 4. T3.2 panel → tabla simple con `GET /api/sessions` refrescada cada 2 s.
 
-**Nunca se recorta:** T2.7 mic, T2.10 dos salas, EN↔ES, T1.12 audiencia, T3.12 README, T1.13 deploy, T4.4 video, T4.5 envío.
+**Nunca se recorta:** T2.7 mic, T2.10a–c dos salas, EN↔ES, T1.12 audiencia, T3.12 README, T1.13 deploy, T4.4 video, T4.5 envío.

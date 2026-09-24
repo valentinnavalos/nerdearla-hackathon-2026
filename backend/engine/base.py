@@ -22,6 +22,9 @@ class SessionContext:
 class Engine(ABC):
     """Common contract for every transcription/translation engine."""
 
+    needs_audio: bool = True  # False = the engine ignores `frames` (replay), no source is opened
+    uses_live: bool = False  # True = holds a Gemini Live session: counts against MAX_CONCURRENT_LIVE
+
     @abstractmethod
     async def run(self, frames: AsyncIterator[AudioFrame], emit: Emit, ctx: SessionContext) -> None:
         """Consume audio frames until the source ends, calling emit() for each caption."""

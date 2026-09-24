@@ -16,3 +16,17 @@ Contrato de endpoints (congelado en T0.5):
 | GET      | /api/sessions/{id}/knowledge                        | --    | Knowledge Pack                    |
 | POST     | /api/sessions/{id}/ask                              | -- (rate limit) | Preguntale a la charla   |
 """
+
+from fastapi import APIRouter, Request
+
+router = APIRouter()
+
+
+@router.get("/healthz")
+def healthz(request: Request) -> dict:
+    return {"ok": True, "engine": request.app.state.settings.engine}
+
+
+@router.get("/api/public/sessions")
+def public_sessions(request: Request) -> list[dict]:
+    return [s.public_info() for s in request.app.state.manager.list()]

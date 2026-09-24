@@ -1,1 +1,231 @@
-# Session (stage worker) — ver T1.9
+"""Session (stage worker): one room = source -> FrameQueue -> engine -> emit -> subscribers."""
+
+import asyncio
+import logging
+import re
+import time
+import unicodedata
+from collections import deque
+from enum import Enum
+from pathlib import Path
+from typing import Callable
+
+from backend.core.events import CaptionEvent
+from backend.core.glossary import Glossary
+from backend.core.persistence import CaptionWriter
+from backend.engine.base import Engine, SessionContext
+from backend.sources.base import FrameQueue, pump
+from backend.sources.file_source import FileSource
+
+LANGS = ("en", "es")
+HISTORY_SIZE = 50  # finals kept per language for late joiners
+SUBSCRIBER_QUEUE_SIZE = 100
+FRAME_QUEUE_SIZE = 50  # 5 s of audio
+
+
+class SessionStatus(str, Enum):
+    CREATED = "CREATED"
+    RUNNING = "RUNNING"
+    ROTATING = "ROTATING"
+    RECONNECTING = "RECONNECTING"
+    ERROR = "ERROR"
+    STOPPED = "STOPPED"
+
+
+def slugify(text: str) -> str:
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-") or "sala"
+
+
+def other_lang(lang: str) -> str:
+    return "es" if lang == "en" else "en"
+
+
+async def _no_frames():
+    return
+    yield
+
+
+class Session:
+    def __init__(
+        self,
+        id: str,
+        title: str,
+        speaker: str,
+        source_lang: str,
+        source: str = "file",
+        file: str | None = None,
+        loop: bool = False,
+        glossary: Glossary | None = None,
+        realtime: bool = True,
+        captions_path: Path | None = None,  # finals are appended here (T2.3)
+    ):
+        self.id = id
+        self.title = title
+        self.speaker = speaker
+        self.source_lang = source_lang
+        self.target_lang = other_lang(source_lang)
+        self.source = source
+        self.file = file
+        self.loop = loop
+        self.glossary = glossary or Glossary()
+        self.realtime = realtime
+        self.captions_path = captions_path
+        self.status = SessionStatus.CREATED
+        self.started_at: float | None = None
+        self.stopped_at: float | None = None
+        self.last_error: str | None = None
+        self.events = 0
+        self._frames: FrameQueue | None = None
+        self._history: dict[str, deque[dict]] = {lang: deque(maxlen=HISTORY_SIZE) for lang in LANGS}
+        self._subscribers: dict[str, set[asyncio.Queue]] = {lang: set() for lang in LANGS}
+        self._task: asyncio.Task | None = None
+        self._writer: CaptionWriter | None = None
+        self.log = logging.LoggerAdapter(logging.getLogger("backend.session"), {"session": id})
+
+    @property
+    def running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    @property
+    def dropped_frames(self) -> int:
+        return self._frames.dropped_frames if self._frames else 0
+
+    def listeners(self) -> dict[str, int]:
+        return {lang: len(subs) for lang, subs in self._subscribers.items()}
+
+    def public_info(self) -> dict:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "speaker": self.speaker,
+            "source_lang": self.source_lang,
+            "target_lang": self.target_lang,
+            "status": self.status.value,
+        }
+
+    def info(self) -> dict:
+        """Full state for the admin API / panel (T2.5, T3.2)."""
+        return {
+            **self.public_info(),
+            "source": self.source,
+            "file": self.file,
+            "loop": self.loop,
+            "started_at": self.started_at,
+            "stopped_at": self.stopped_at,
+            "last_error": self.last_error,
+            "metrics": {
+                "events": self.events,
+                "dropped_frames": self.dropped_frames,
+                "listeners": self.listeners(),
+                "captions_written": self._writer.written if self._writer else 0,
+                "write_errors": self._writer.write_errors if self._writer else 0,
+            },
+        }
+
+    # --- lifecycle -----------------------------------------------------------
+
+    def start(self, engine: Engine) -> None:
+        if self.running:
+            raise RuntimeError(f"la sala {self.id} ya está corriendo")
+        if engine.needs_audio:
+            if self.source == "mic":
+                raise ValueError("la fuente mic llega con la ingesta por WS (T2.6)")
+            if not self.file:
+                raise ValueError("la fuente file necesita un archivo")
+        self.status = SessionStatus.RUNNING
+        self.started_at = time.time()
+        self.stopped_at = None
+        self.last_error = None
+        self._publish_status()
+        if self.captions_path is not None:
+            self._writer = CaptionWriter(self.captions_path, self.log)
+            self._writer.start()
+        self._task = asyncio.create_task(self._run(engine), name=f"session:{self.id}")
+
+    def on_done(self, callback: Callable[[], None]) -> None:
+        """Run `callback` when the current run ends, however it ends (used to free the Live slot)."""
+        self._task.add_done_callback(lambda _: callback())
+
+    async def _run(self, engine: Engine) -> None:
+        ctx = SessionContext(self.id, self.source_lang, self.target_lang, self.glossary)
+        producer: asyncio.Task | None = None
+        try:
+            frames = _no_frames()
+            if engine.needs_audio:
+                self._frames = FrameQueue(maxsize=FRAME_QUEUE_SIZE)
+                source = FileSource(self.file, realtime=self.realtime, loop=self.loop)
+                producer = asyncio.create_task(pump(source, self._frames))
+                frames = self._frames
+            source_desc = (self.file or self.source) if engine.needs_audio else "-"
+            self.log.info("started: engine=%s source=%s", type(engine).__name__, source_desc)
+            await engine.run(frames, self.emit, ctx)
+            if producer and producer.done() and not producer.cancelled() and producer.exception():
+                raise producer.exception()
+            self._finish(SessionStatus.STOPPED)
+        except asyncio.CancelledError:
+            self._finish(SessionStatus.STOPPED)
+            raise
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
+            self.log.exception("failed")
+            self._finish(SessionStatus.ERROR)
+        finally:
+            if producer:
+                producer.cancel()
+            if self._writer is not None:
+                await self._writer.close()
+
+    async def stop(self) -> None:
+        if self.running:
+            self._task.cancel()
+            await asyncio.gather(self._task, return_exceptions=True)
+        if self._writer is not None:
+            await self._writer.close()  # also when the task was cancelled before it ever ran
+        if self.status not in (SessionStatus.STOPPED, SessionStatus.ERROR):
+            self._finish(SessionStatus.STOPPED)
+
+    def fail(self, error: str) -> None:
+        """Mark the room as failed without running it (e.g. the engine could not be built)."""
+        self.last_error = error
+        self.log.error("cannot start: %s", error)
+        self._finish(SessionStatus.ERROR)
+
+    def _finish(self, status: SessionStatus) -> None:
+        self.status = status
+        self.stopped_at = time.time()
+        self.log.info("%s (events=%d, dropped_frames=%d)", status.value, self.events, self.dropped_frames)
+        self._publish_status()
+
+    # --- pub/sub -------------------------------------------------------------
+
+    async def emit(self, event: CaptionEvent) -> None:
+        self.events += 1
+        msg = event.model_dump()
+        if event.final:
+            self._history[event.lang].append(msg)
+            if self._writer is not None:
+                self._writer.put(msg)  # never awaits the disk
+        self._publish(event.lang, msg)
+
+    def history(self, lang: str) -> list[dict]:
+        return list(self._history[lang])
+
+    def subscribe(self, lang: str) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=SUBSCRIBER_QUEUE_SIZE)
+        self._subscribers[lang].add(queue)
+        return queue
+
+    def unsubscribe(self, lang: str, queue: asyncio.Queue) -> None:
+        self._subscribers[lang].discard(queue)
+
+    def _publish(self, lang: str, msg: dict) -> None:
+        for queue in self._subscribers[lang]:
+            if queue.full():
+                queue.get_nowait()  # slow client: drop its oldest message, never block the room
+            queue.put_nowait(msg)
+
+    def _publish_status(self) -> None:
+        msg = {"type": "session_status", "session_id": self.id, "status": self.status.value}
+        for lang in LANGS:
+            self._publish(lang, msg)

@@ -183,7 +183,7 @@ Panel de monitoreo ◄── WS ────────────── │ A
 
                                          └──────────────────────────────────────────────┘
 
-Cada sala corre su tubería completa, aislada: si una falla, no afecta al resto.
+Cada sala corre su tubería completa, aislada: si una falla, no afecta al resto. Todas comparten el event loop, así que nada en el camino Gemini → segmentador → broadcast puede bloquear: la escritura de `captions.jsonl` va por una cola y un thread (`core/persistence.py`).
 
 ### 2.5 Contratos (congelar en H0)
 
@@ -205,10 +205,17 @@ Cada cliente de audiencia tiene una cola acotada: si un celular es lento, se des
 
 ### 2.6 Rotación de sesión (pieza más riesgosa)
 
-- Las sesiones Live tienen límite de \~10 min → rotar a los \~9 min o al recibir `GoAway`.  
-- Rotar **secuencialmente** (cerrar → abrir) para no duplicar el cupo de sesiones concurrentes.  
-- Mantener un ring buffer de \~2 s de audio y reenviarlo a la sesión nueva.  
-- Deduplicar el solapamiento del primer final de la sesión nueva.  
+Hay que distinguir dos límites (docs de *session management* + medición de T1.4):
+
+- **Conexión (WebSocket): \~10 min.** Medido: `GoAway` a los 9:00 con `time_left=50s`; si el cliente no cierra, corte a los 9:50 con `1008`.  
+- **Sesión solo de audio: 15 min sin compresión**, extensible con `context_window_compression` (ventana deslizante). Para charlas de 40 min hay que activarla (verificar que live-translate la acepte).
+
+Cómo se rota:
+
+- **Reanudar, no empezar de cero:** pedir `session_resumption` y guardar el último handle de `session_resumption_update` (válido 2 h; en T1.4 llegan \~1/s con `resumable: true`). Ante `GoAway` o a los \~9 min, reconectar pasando ese handle: el modelo conserva el contexto.  
+- **Audio durante la reconexión:** se acumula en un buffer y se manda apenas conecta; `last_consumed_client_message_index` dice qué audio ya consumió el servidor, para reenviar solo el resto (sin duplicar texto). Solo viene con `SessionResumptionConfig(transparent=True)`: sin eso llegó vacío en el probe.  
+- **Fallback si la reanudación falla:** sesión nueva + ring buffer de \~2,5 s + dedupe del primer final.  
+- Siempre **secuencial** (cerrar → reconectar): nunca dos conexiones de la misma sala a la vez.  
 - Backoff exponencial ante errores o 429, sin tumbar la sala.
 
 ### 2.7 Stack
@@ -244,9 +251,9 @@ Cada cliente de audiencia tiene una cola acotada: si un celular es lento, se des
 
 - **Un Space aguanta varias salas:** el trabajo pesado lo hace Gemini; el container solo mueve audio y texto (más la traducción local liviana del Camino 2).  
 - **Más salas \= más Spaces:** un Space por grupo de salas \+ una página de agenda estática que apunta a cada uno. Sin estado compartido.  
-- **El techo real es el cupo gratis de sesiones Live por proyecto** (según reportes, \~3–5 concurrentes en free tier). Costo cero con 5–10 salas en paralelo **no está garantizado** por el free tier.  
+- **El techo real es el cupo de sesiones Live del proyecto.** Google no lo publica: el valor efectivo se mira en AI Studio → Rate limits y se mide (T2.10a). En T2.10a, 2 sesiones simultáneas anduvieron bien desde frío, pero abrir sesiones nuevas enseguida de otras degrada a una: hay que evitar crear sesiones de más (rotar reanudando). El `SessionManager` aplica ese techo: una sala más allá de `MAX_CONCURRENT_LIVE` no arranca (error claro, nunca encola). Costo cero con varias salas en paralelo **no está garantizado** por el free tier.  
 - **Cómo se documenta:**  
-  - Key configurable por sala (revisar los términos de Google antes de usar varias cuentas propias).  
+  - Key configurable por sala: solo suma cupo si cada key es de **otro proyecto** (los límites son por proyecto, no por key). Revisar los términos de Google antes de usar varias cuentas propias.  
   - Modo 100% local como roadmap: Whisper \+ Gemma/Argos en hardware propio (la consigna lo sugiere).
 
 ---
@@ -269,14 +276,14 @@ Cada cliente de audiencia tiene una cola acotada: si un celular es lento, se des
 
 ### Fase 1 — Base y mínimo viable (H0–H3.5)
 
-- [ ] (ambos) Key en proyecto sin billing \+ chequeo de cuotas en AI Studio \+ decisión del camino.  
-- [ ] (ambos) Congelar interfaz `Engine`, contrato JSON y endpoints.  
-- [ ] (A) Fix productor/consumidor en `FileSource` \+ bump de `google-genai`.  
-- [ ] (A) `LiveSessionRunner` genérico probado por CLI con los mp3. Medir latencia de interim y final.  
-- [ ] (A) Config del camino elegido. Si es Camino 2: Argos EN↔ES con placeholders para el glosario.  
-- [ ] (B) FastAPI \+ SessionManager \+ WS de captions \+ `FakeEngine` que reproduce un `captions.jsonl` (B no se bloquea esperando al motor; de paso nace el modo replay).  
-- [ ] (B) Página de audiencia mínima: selector de sala \+ idioma, interim en gris reemplazado por el final.  
-- [ ] (B) Dockerfile compatible con HF \+ Space creado \+ secret \+ primer deploy. **Deployar en H3, no en H13.**  
+- [x] (ambos) Key en proyecto sin billing \+ chequeo de cuotas en AI Studio \+ decisión del camino. *(Fase 0 ✅)*  
+- [x] (ambos) Congelar interfaz `Engine`, contrato JSON y endpoints. *(Fase 0 ✅)*  
+- [x] (A) Fix productor/consumidor en `FileSource` \+ bump de `google-genai`.  
+- [x] (A) `LiveSessionRunner` genérico probado por CLI con los mp3. Medir latencia de interim y final. *(mediciones en el README)*  
+- [x] (A) Config del camino elegido. Si es Camino 2: Argos EN↔ES con placeholders para el glosario. *(Camino 1; Argos N/A)*  
+- [x] (B) FastAPI \+ SessionManager \+ WS de captions \+ `FakeEngine` que reproduce un `captions.jsonl` (B no se bloquea esperando al motor; de paso nace el modo replay).  
+- [x] (B) Página de audiencia mínima: selector de sala \+ idioma, interim en gris reemplazado por el final.  
+- [ ] (B) Dockerfile compatible con HF \+ Space creado \+ secret \+ primer deploy. **Deployar en H3, no en H13.** *(Dockerfile listo; falta Space + deploy)*  
 - [ ] ✅ **Checkpoint H3.5:** mp3 → Space → subtítulos en el celular.
 
 ### Fase 2 — Core (H3.5–H8)
@@ -288,7 +295,7 @@ Cada cliente de audiencia tiene una cola acotada: si un celular es lento, se des
 - [ ] (B) MicSource con AudioWorklet \+ selector de dispositivo de entrada (la placa de audio).  
 - [ ] (B) Vista de escenario: captura \+ subtítulos \+ QR.  
 - [ ] (B) Consola de operador: crear sala, fuente (mic / mp3), idioma, glosario, start/stop.  
-- [ ] (ambos) Prueba en el Space: 2 salas durante 20+ min (mic en ES \+ mp3 en EN).  
+- [ ] (ambos) 2 salas: sesiones Live aisladas (T2.10a) → backend completo 2–3 min (T2.10b) → Space 20+ min, mic en ES \+ mp3 en EN (T2.10c) → rotación con 2 salas (T2.10d).  
 - [ ] 🎥 **H8: video de emergencia** aunque sea feo.
 
 ### Fase 3 — Integración, UX y datos de prueba (H8–H12.5)
@@ -354,7 +361,7 @@ No hay presentación en vivo: el video \+ el Devpost son el pitch.
 
 | Riesgo | Plan B |
 | :---- | :---- |
-| El cupo de sesiones Live no alcanza para 2 salas | Key por sala (la de cada integrante) o Camino 2 |
+| El cupo de sesiones Live no alcanza para 2 salas | Key por sala de **otro proyecto** (la de cada integrante), Camino 2 si transcribe-live tiene otro cupo, o 1 sala por Space |
 | Se agota la cuota diaria en plena demo | La traducción local sigue funcionando; modo replay para grabar el video sin API |
 | El modelo preview cambia o falla | Cambiar de camino con el flag `ENGINE=` (misma interfaz) |
 | La rotación de 10 min se rompe | Prueba obligatoria de 20+ min antes del freeze |
@@ -368,6 +375,8 @@ No hay presentación en vivo: el video \+ el Devpost son el pitch.
 ## 8\. Pendiente
 
 - [x] Decisión de camino (T0.3): **Camino 1 — `live-translate`** (`ENGINE=live_translate`, modelo `gemini-3.5-live-translate-preview`). Implementado y probado en `backend/engine/live_translate.py`.
+- [ ] Confirmar el cupo de sesiones Live concurrentes del proyecto nuevo (AI Studio → Rate limits). En T1.4, con 2 sesiones a la vez la segunda no recibió respuesta. Define si alcanza para 2 salas (T2.10) o si hace falta key por sala / Camino 2.
+- [x] Probe T2.10a (`scripts/live_probe.py`, tabla en el README): 2 sesiones simultáneas andan bien desde frío; abrir sesiones nuevas enseguida de otras degrada a una (3–7× más lenta, se va en < 5 min); la reanudación con handle funciona (1,3 s de hueco, sin repetir texto).
 
 ---
 

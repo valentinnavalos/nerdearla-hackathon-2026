@@ -1,0 +1,20 @@
+{"type": "caption", "session_id": "demo", "seg": 1, "lang": "en", "kind": "orig", "final": false, "text": "Welcome to Nerdearla, thanks", "t0": 0.0, "t1": 1.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 1, "lang": "es", "kind": "trans", "final": false, "text": "Bienvenidos a Nerdearla, gracias", "t0": 0.0, "t1": 2.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 1, "lang": "en", "kind": "orig", "final": true, "text": "Welcome to Nerdearla, thanks for joining this session.", "t0": 0.0, "t1": 2.5, "lat_ms": 1200}
+{"type": "caption", "session_id": "demo", "seg": 1, "lang": "es", "kind": "trans", "final": true, "text": "Bienvenidos a Nerdearla, gracias por sumarse a esta sesión.", "t0": 0.0, "t1": 3.2, "lat_ms": 1900}
+{"type": "caption", "session_id": "demo", "seg": 2, "lang": "en", "kind": "orig", "final": false, "text": "Today we will talk about running", "t0": 4.0, "t1": 5.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 2, "lang": "es", "kind": "trans", "final": false, "text": "Hoy vamos a hablar de cómo", "t0": 4.0, "t1": 6.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 2, "lang": "en", "kind": "orig", "final": true, "text": "Today we will talk about running Kubernetes on a budget.", "t0": 4.0, "t1": 6.5, "lat_ms": 1200}
+{"type": "caption", "session_id": "demo", "seg": 2, "lang": "es", "kind": "trans", "final": true, "text": "Hoy vamos a hablar de cómo correr Kubernetes con poco presupuesto.", "t0": 4.0, "t1": 7.2, "lat_ms": 1900}
+{"type": "caption", "session_id": "demo", "seg": 3, "lang": "en", "kind": "orig", "final": false, "text": "First, let's look at why most", "t0": 8.0, "t1": 9.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 3, "lang": "es", "kind": "trans", "final": false, "text": "Primero, veamos por qué la mayoría", "t0": 8.0, "t1": 10.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 3, "lang": "en", "kind": "orig", "final": true, "text": "First, let's look at why most clusters are oversized.", "t0": 8.0, "t1": 10.5, "lat_ms": 1200}
+{"type": "caption", "session_id": "demo", "seg": 3, "lang": "es", "kind": "trans", "final": true, "text": "Primero, veamos por qué la mayoría de los clusters están sobredimensionados.", "t0": 8.0, "t1": 11.2, "lat_ms": 1900}
+{"type": "caption", "session_id": "demo", "seg": 4, "lang": "en", "kind": "orig", "final": false, "text": "We use Terraform to keep", "t0": 12.0, "t1": 13.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 4, "lang": "es", "kind": "trans", "final": false, "text": "Usamos Terraform para que", "t0": 12.0, "t1": 14.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 4, "lang": "en", "kind": "orig", "final": true, "text": "We use Terraform to keep every environment reproducible.", "t0": 12.0, "t1": 14.5, "lat_ms": 1200}
+{"type": "caption", "session_id": "demo", "seg": 4, "lang": "es", "kind": "trans", "final": true, "text": "Usamos Terraform para que cada entorno sea reproducible.", "t0": 12.0, "t1": 15.2, "lat_ms": 1900}
+{"type": "caption", "session_id": "demo", "seg": 5, "lang": "en", "kind": "orig", "final": false, "text": "And these live captions are generated", "t0": 16.0, "t1": 17.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 5, "lang": "es", "kind": "trans", "final": false, "text": "Y estos subtítulos en vivo se generan", "t0": 16.0, "t1": 18.0, "lat_ms": null}
+{"type": "caption", "session_id": "demo", "seg": 5, "lang": "en", "kind": "orig", "final": true, "text": "And these live captions are generated with Gemini, at zero cost.", "t0": 16.0, "t1": 18.5, "lat_ms": 1200}
+{"type": "caption", "session_id": "demo", "seg": 5, "lang": "es", "kind": "trans", "final": true, "text": "Y estos subtítulos en vivo se generan con Gemini, a costo cero.", "t0": 16.0, "t1": 19.2, "lat_ms": 1900}
