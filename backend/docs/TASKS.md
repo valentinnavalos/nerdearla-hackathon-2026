@@ -199,6 +199,8 @@ README.md  PLAN.md  TASKS.md  LICENSE
 
 ### T0.4 · Estructura del repo, `.env.example`, Makefile — B · 20 min · P0
 
+**Estado:** ✅ Completo
+
 **Técnico:**
 - Crear carpetas y archivos vacíos según "Estructura objetivo". Renombrar `engine/gemini.py` → `engine/chunked.py`.
 - `.env.example` con todas las variables de la tabla.
