@@ -5,7 +5,7 @@ from google.genai import types
 
 from backend.core.events import CaptionEvent
 from backend.core.glossary import Glossary
-from backend.engine.base import Emit, Engine
+from backend.engine.base import Emit, Engine, SessionContext
 from backend.engine.live_runner import LiveSessionRunner
 from backend.sources.base import AudioFrame
 
@@ -31,7 +31,7 @@ class LiveTranslateEngine(Engine):
     def _apply(self, text: str) -> str:
         return self.glossary.apply(text) if self.glossary else text
 
-    async def run(self, frames: AsyncIterator[AudioFrame], emit: Emit) -> None:
+    async def run(self, frames: AsyncIterator[AudioFrame], emit: Emit, ctx: SessionContext) -> None:
         self._t_start = time.monotonic()
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
@@ -44,21 +44,29 @@ class LiveTranslateEngine(Engine):
         )
 
         async def on_input_text(text: str, is_interim: bool) -> None:
+            t0 = time.monotonic() - self._t_start
             await emit(CaptionEvent(
+                session_id=ctx.session_id,
                 lang=self.source_lang,
                 kind="orig",
+                seg=0,
                 final=not is_interim,
                 text=self._apply(text),
-                t0=time.monotonic() - self._t_start,
+                t0=t0,
+                t1=t0,
             ))
 
         async def on_output_text(text: str) -> None:
+            t0 = time.monotonic() - self._t_start
             await emit(CaptionEvent(
+                session_id=ctx.session_id,
                 lang=self.target_lang,
                 kind="trans",
+                seg=0,
                 final=True,
                 text=self._apply(text),
-                t0=time.monotonic() - self._t_start,
+                t0=t0,
+                t1=t0,
             ))
 
         async def on_go_away(time_left) -> None:

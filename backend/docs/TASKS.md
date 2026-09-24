@@ -11,55 +11,55 @@
 
 ## Tablero resumen
 
-| ID | Tarea | Dueño | Est. | Prio | Fase |
-|---|---|---|---|---|---|
-| T0.1 | Proyecto y API key sin billing | AB | 15 min | P0 | 0 |
-| T0.2 | Relevar cuotas + prueba cualitativa en AI Studio | A | 20 min | P0 | 0 |
-| T0.3 | Decidir Camino 1 o 2 | AB | 5 min | P0 | 0 |
-| T0.4 | Estructura del repo, `.env.example`, Makefile | B | 20 min | P0 | 0 |
-| T0.5 | Congelar contratos (evento, Engine, endpoints) | AB | 20 min | P0 | 0 |
-| T1.1 | Fix `FileSource`: productor/consumidor, pacing, loop | A | 25 min | P0 | 1 |
-| T1.2 | Actualizar `google-genai` y verificar features | A | 10 min | P0 | 1 |
-| T1.3 | `LiveSessionRunner` v0 + CLI | A | 45 min | P0 | 1 |
-| T1.4 | Spike de mediciones | A | 30 min | P0 | 1 |
-| T1.5 | Engine del camino elegido | A | 45 min | P0 | 1 |
-| T1.6 | Traductor local Argos (solo Camino 2) | A | 30 min | P0* | 1 |
-| T1.7 | Módulo de glosario | A | 20 min | P0 | 1 |
-| T1.8 | Esqueleto FastAPI + config | B | 20 min | P0 | 1 |
-| T1.9 | `SessionManager` + `Session` + pub/sub | B | 40 min | P0 | 1 |
-| T1.10 | `ReplayEngine` + jsonl de ejemplo | B | 20 min | P0 | 1 |
-| T1.11 | WS de captions | B | 20 min | P0 | 1 |
-| T1.12 | Página de audiencia v0 | B | 40 min | P0 | 1 |
-| T1.13 | Dockerfile HF + primer deploy | B | 40 min | P0 | 1 |
-| T1.14 | Integración checkpoint H3.5 | AB | 15 min | P0 | 1 |
-| T2.1 | Rotación + resiliencia del runner | A | 1.5 h | P0 | 2 |
-| T2.2 | Aislamiento multi-sala | A | 25 min | P0 | 2 |
-| T2.3 | Persistencia (`captions.jsonl`, `meta.json`) | A | 20 min | P0 | 2 |
-| T2.4 | Métricas: nivel, silencio, latencia, cuota | A | 50 min | P1 | 2 |
-| T2.5 | API de administración + auth | A | 35 min | P0 | 2 |
-| T2.6 | WS de ingesta de audio (backend del mic) | B | 25 min | P0 | 2 |
-| T2.7 | Captura de mic con AudioWorklet | B | 1.3 h | P0 | 2 |
-| T2.8 | Vista de escenario (captura + subtítulos + QR) | B | 50 min | P0 | 2 |
-| T2.9 | Consola de operador | B | 50 min | P0 | 2 |
-| T2.10 | Prueba integrada 2 salas × 20 min | AB | 30 min | P0 | 2 |
-| T2.11 | Video de emergencia | AB | 30 min | P0 | 2 |
-| T3.1 | Modo overlay para OBS/vMix | B | 35 min | P1 | 3 |
-| T3.2 | Panel de monitoreo | B | 1 h | P1 | 3 |
-| T3.3 | Exports SRT / VTT / TXT / MD | A | 45 min | P1 | 3 |
-| T3.4 | Knowledge Pack (generación) | A | 50 min | P1 | 3 |
-| T3.5 | Página de la charla (post-talk) | B | 1.2 h | P1 | 3 |
-| T3.6 | "Preguntale a la charla" | A | 30 min | P1 | 3 |
-| T3.7 | Pasada final de calidad con glosario | A | 30 min | P2 | 3 |
-| T3.8 | Audio traducido (solo Camino 1) | A | 1.5 h | P2 | 3 |
-| T3.9 | Exporter automático a NotebookLM | A | 1.5 h (timebox) | P2 | 3 |
-| T3.10 | `docker-compose.yml` + túnel opcional | A | 20 min | P1 | 3 |
-| T3.11 | Samples, glosario default, replay real | AB | 20 min | P0 | 3 |
-| T3.12 | README completo | B | 1 h | P0 | 3 |
-| T4.1 | E2E desde cero (otra conferencia) | AB | 30 min | P0 | 4 |
-| T4.2 | Hardening y caminos de error | AB | 25 min | P0 | 4 |
-| T4.3 | Code freeze + tag | AB | 5 min | P0 | 4 |
-| T4.4 | Video final con subtítulos propios | AB | 1 h | P0 | 4 |
-| T4.5 | Envío a Devpost | AB | 30 min | P0 | 4 |
+| ID | Tarea | Dueño | Est. | Prio | Fase | Estado |
+|---|---|---|---|---|---|---|
+| T0.1 | Proyecto y API key sin billing | AB | 15 min | P0 | 0 | ✅ |
+| T0.2 | Relevar cuotas + prueba cualitativa en AI Studio | A | 20 min | P0 | 0 | ✅ |
+| T0.3 | Decidir Camino 1 o 2 | AB | 5 min | P0 | 0 | ✅ |
+| T0.4 | Estructura del repo, `.env.example`, Makefile | B | 20 min | P0 | 0 | ✅ |
+| T0.5 | Congelar contratos (evento, Engine, endpoints) | AB | 20 min | P0 | 0 | ✅ |
+| T1.1 | Fix `FileSource`: productor/consumidor, pacing, loop | A | 25 min | P0 | 1 | |
+| T1.2 | Actualizar `google-genai` y verificar features | A | 10 min | P0 | 1 | |
+| T1.3 | `LiveSessionRunner` v0 + CLI | A | 45 min | P0 | 1 | |
+| T1.4 | Spike de mediciones | A | 30 min | P0 | 1 | |
+| T1.5 | Engine del camino elegido | A | 45 min | P0 | 1 | |
+| T1.6 | Traductor local Argos (solo Camino 2) | A | 30 min | P0* | 1 | |
+| T1.7 | Módulo de glosario | A | 20 min | P0 | 1 | |
+| T1.8 | Esqueleto FastAPI + config | B | 20 min | P0 | 1 | |
+| T1.9 | `SessionManager` + `Session` + pub/sub | B | 40 min | P0 | 1 | |
+| T1.10 | `ReplayEngine` + jsonl de ejemplo | B | 20 min | P0 | 1 | |
+| T1.11 | WS de captions | B | 20 min | P0 | 1 | |
+| T1.12 | Página de audiencia v0 | B | 40 min | P0 | 1 | |
+| T1.13 | Dockerfile HF + primer deploy | B | 40 min | P0 | 1 | |
+| T1.14 | Integración checkpoint H3.5 | AB | 15 min | P0 | 1 | |
+| T2.1 | Rotación + resiliencia del runner | A | 1.5 h | P0 | 2 | |
+| T2.2 | Aislamiento multi-sala | A | 25 min | P0 | 2 | |
+| T2.3 | Persistencia (`captions.jsonl`, `meta.json`) | A | 20 min | P0 | 2 | |
+| T2.4 | Métricas: nivel, silencio, latencia, cuota | A | 50 min | P1 | 2 | |
+| T2.5 | API de administración + auth | A | 35 min | P0 | 2 | |
+| T2.6 | WS de ingesta de audio (backend del mic) | B | 25 min | P0 | 2 | |
+| T2.7 | Captura de mic con AudioWorklet | B | 1.3 h | P0 | 2 | |
+| T2.8 | Vista de escenario (captura + subtítulos + QR) | B | 50 min | P0 | 2 | |
+| T2.9 | Consola de operador | B | 50 min | P0 | 2 | |
+| T2.10 | Prueba integrada 2 salas × 20 min | AB | 30 min | P0 | 2 | |
+| T2.11 | Video de emergencia | AB | 30 min | P0 | 2 | |
+| T3.1 | Modo overlay para OBS/vMix | B | 35 min | P1 | 3 | |
+| T3.2 | Panel de monitoreo | B | 1 h | P1 | 3 | |
+| T3.3 | Exports SRT / VTT / TXT / MD | A | 45 min | P1 | 3 | |
+| T3.4 | Knowledge Pack (generación) | A | 50 min | P1 | 3 | |
+| T3.5 | Página de la charla (post-talk) | B | 1.2 h | P1 | 3 | |
+| T3.6 | "Preguntale a la charla" | A | 30 min | P1 | 3 | |
+| T3.7 | Pasada final de calidad con glosario | A | 30 min | P2 | 3 | |
+| T3.8 | Audio traducido (solo Camino 1) | A | 1.5 h | P2 | 3 | |
+| T3.9 | Exporter automático a NotebookLM | A | 1.5 h (timebox) | P2 | 3 | |
+| T3.10 | `docker-compose.yml` + túnel opcional | A | 20 min | P1 | 3 | |
+| T3.11 | Samples, glosario default, replay real | AB | 20 min | P0 | 3 | |
+| T3.12 | README completo | B | 1 h | P0 | 3 | |
+| T4.1 | E2E desde cero (otra conferencia) | AB | 30 min | P0 | 4 | |
+| T4.2 | Hardening y caminos de error | AB | 25 min | P0 | 4 | |
+| T4.3 | Code freeze + tag | AB | 5 min | P0 | 4 | |
+| T4.4 | Video final con subtítulos propios | AB | 1 h | P0 | 4 | |
+| T4.5 | Envío a Devpost | AB | 30 min | P0 | 4 | |
 
 \* T1.6 es P0 solo si se elige el Camino 2; si es Camino 1, no se hace.
 
@@ -214,6 +214,8 @@ README.md  PLAN.md  TASKS.md  LICENSE
 **Listo cuando:** `make dev` levanta (aunque devuelva 404) y `make test` corre sin errores.
 
 ### T0.5 · Congelar contratos — AB · 20 min · P0
+
+**Estado:** ✅ Completo
 
 **Funcional:** que A y B puedan trabajar en paralelo sin pisarse.
 
