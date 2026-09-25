@@ -1,4 +1,4 @@
-# Nerdearla Live Captions
+# Piluso Live Captions
 
 Subtítulos y traducción EN ↔ ES en vivo para conferencias, con Gemini Live (free tier, costo cero). Una sala = una sesión Live que devuelve el original y la traducción; la audiencia elige sala e idioma desde el celular, con overlay listo para OBS/vMix y descargas de la transcripción al terminar.
 
@@ -337,4 +337,4 @@ En el free tier, Google usa el contenido enviado para mejorar sus productos. Par
 
 ## Licencia y créditos
 
-MIT. Hecho para Nerdearla, con Gemini Live (Google AI Studio) como motor de transcripción y traducción.
+MIT. Piluso Live Captions, hecho para Nerdearla, con Gemini Live (Google AI Studio) como motor de transcripción y traducción.

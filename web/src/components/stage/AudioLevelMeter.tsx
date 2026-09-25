@@ -9,7 +9,7 @@ export function AudioLevelMeter({ dbfs }: AudioLevelMeterProps) {
   return (
     <div className="h-2 w-15 overflow-hidden rounded-full bg-border">
       <div
-        className={cn("h-full transition-[width] duration-100 ease-linear", dbfs > -6 ? "bg-amber-500" : "bg-primary")}
+        className={cn("h-full transition-[width] duration-100 ease-linear", dbfs > -6 ? "bg-destructive" : "bg-emerald-500")}
         style={{ width: `${pct}%` }}
       />
     </div>
