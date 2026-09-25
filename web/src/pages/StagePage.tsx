@@ -6,7 +6,7 @@ import { MicPanel } from "@/components/stage/MicPanel"
 import { QrCodePanel } from "@/components/stage/QrCodePanel"
 import { Button } from "@/components/ui/button"
 import { useCaptionSocket } from "@/hooks/useCaptionSocket"
-import { getPublicSessions, getSessions } from "@/lib/api"
+import { getNetworkInfo, getPublicSessions, getSessions } from "@/lib/api"
 import { connectionLabel } from "@/lib/connectionLabel"
 import { cn } from "@/lib/utils"
 import type { Lang, PublicSession } from "@/types/session"
@@ -19,6 +19,7 @@ export function StagePage() {
 
   const [room, setRoom] = useState<PublicSession | null>(null)
   const [isMicRoom, setIsMicRoom] = useState(false)
+  const [audienceHost, setAudienceHost] = useState(location.host)
 
   const { segments, status, connectionState, lastCloseCode } = useCaptionSocket(sessionId ?? null, lang)
   const notFound = connectionState === "closed" && lastCloseCode === 4404
@@ -39,6 +40,21 @@ export function StagePage() {
       cancelled = true
     }
   }, [sessionId])
+
+  useEffect(() => {
+    // localhost/127.0.0.1 is useless in a QR code for a phone on the same Wi-Fi:
+    // swap it for the machine's LAN-facing IP, keeping the current port.
+    if (!["localhost", "127.0.0.1"].includes(location.hostname)) return
+    let cancelled = false
+    getNetworkInfo()
+      .then(({ lan_ip }) => {
+        if (!cancelled && lan_ip) setAudienceHost(`${lan_ip}${location.port ? `:${location.port}` : ""}`)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!token || !sessionId) return
@@ -63,7 +79,7 @@ export function StagePage() {
     })
   }
 
-  const audienceUrl = sessionId ? `${location.origin}/watch/${sessionId}?lang=es` : ""
+  const audienceUrl = sessionId ? `${location.protocol}//${audienceHost}/watch/${sessionId}?lang=es` : ""
 
   return (
     <div className="relative flex h-dvh flex-col bg-background">

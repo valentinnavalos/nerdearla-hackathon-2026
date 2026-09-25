@@ -6,6 +6,7 @@ import { MetricsPanel } from "@/components/admin/MetricsPanel"
 import { RoomsTable } from "@/components/admin/RoomsTable"
 import { PageShell } from "@/components/layout/PageShell"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAdminSocket } from "@/hooks/useAdminSocket"
 import { useAuthToken } from "@/hooks/useAuthToken"
 import { ApiError, getSessions } from "@/lib/api"
@@ -86,15 +87,18 @@ export function AdminPage() {
           </div>
         </section>
 
-        <section>
-          <h2 className="mb-3 text-lg font-semibold">Salas</h2>
-          <RoomsTable token={token} rooms={rooms} onChanged={() => refreshRooms(token)} />
-        </section>
-
-        <section>
-          <h2 className="mb-3 text-lg font-semibold">Panel de monitoreo</h2>
-          {snapshot ? <MetricsPanel snapshot={snapshot} /> : <p className="text-muted-foreground">Conectando…</p>}
-        </section>
+        <Tabs defaultValue="rooms">
+          <TabsList>
+            <TabsTrigger value="rooms">Salas</TabsTrigger>
+            <TabsTrigger value="monitoring">Monitoreo</TabsTrigger>
+          </TabsList>
+          <TabsContent value="rooms">
+            <RoomsTable token={token} rooms={rooms} onChanged={() => refreshRooms(token)} />
+          </TabsContent>
+          <TabsContent value="monitoring">
+            {snapshot ? <MetricsPanel snapshot={snapshot} /> : <p className="text-muted-foreground">Conectando…</p>}
+          </TabsContent>
+        </Tabs>
       </div>
     </PageShell>
   )

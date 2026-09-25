@@ -5,6 +5,7 @@ Contrato de endpoints (congelado en T0.5):
 | Método   | Ruta                                              | Auth  | Uso                              |
 |----------|----------------------------------------------------|-------|-----------------------------------|
 | GET      | /healthz                                            | --    | Healthcheck                       |
+| GET      | /api/network-info                                   | --    | IP de LAN, para el QR del escenario |
 | GET      | /api/public/sessions                                | --    | Lista pública: id, título, orador, idiomas, estado |
 | POST     | /api/sessions                                       | admin | Crear sala                        |
 | POST     | /api/sessions/{id}/start                            | admin | Arrancar                          |
@@ -17,6 +18,7 @@ Contrato de endpoints (congelado en T0.5):
 | POST     | /api/sessions/{id}/ask                              | -- (rate limit) | Preguntale a la charla (T3.6) |
 """
 
+import socket
 from pathlib import Path
 from typing import Literal
 
@@ -29,6 +31,18 @@ from backend.core.persistence import load_captions
 from backend.post import exports
 
 router = APIRouter()
+
+
+def get_lan_ip() -> str | None:
+    """Best-effort LAN-facing IP (no packets actually sent, just picks the
+    outbound interface), so the stage view's QR works for phones on the same
+    Wi-Fi even when the operator opened it via localhost."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return None
 
 UPLOAD_MAX_BYTES = 100 * 1024 * 1024
 
@@ -53,6 +67,11 @@ class CreateSessionBody(BaseModel):
 @router.get("/healthz")
 def healthz(request: Request) -> dict:
     return {"ok": True, "engine": request.app.state.settings.engine}
+
+
+@router.get("/api/network-info")
+def network_info() -> dict:
+    return {"lan_ip": get_lan_ip()}
 
 
 @router.get("/api/public/sessions")

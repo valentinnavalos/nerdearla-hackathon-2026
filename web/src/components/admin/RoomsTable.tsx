@@ -1,55 +1,17 @@
-import { useState } from "react"
 import { toast } from "sonner"
+import { ExportMenu } from "@/components/admin/ExportMenu"
+import { OverlayConfigDialog } from "@/components/admin/OverlayConfigDialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { deleteSession, getExportUrl, startSession, stopSession } from "@/lib/api"
+import { deleteSession, startSession, stopSession } from "@/lib/api"
 import { STATUS_LABELS, statusBadgeVariant } from "@/lib/constants"
-import type { ExportFormat, Lang, Session } from "@/types/session"
+import type { Session } from "@/types/session"
 
 interface RoomsTableProps {
   token: string
   rooms: Session[]
   onChanged: () => void
-}
-
-function ExportControls({ id }: { id: string }) {
-  const [fmt, setFmt] = useState<ExportFormat>("srt")
-  const [lang, setLang] = useState<Lang>("es")
-
-  return (
-    <div className="flex items-center gap-1">
-      <Select value={fmt} onValueChange={(v) => setFmt(v as ExportFormat)}>
-        <SelectTrigger size="sm" className="w-24">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="srt">SRT</SelectItem>
-          <SelectItem value="vtt">VTT</SelectItem>
-          <SelectItem value="txt">TXT</SelectItem>
-          <SelectItem value="md">MD (ambos)</SelectItem>
-        </SelectContent>
-      </Select>
-      <Select value={lang} onValueChange={(v) => setLang(v as Lang)} disabled={fmt === "md"}>
-        <SelectTrigger size="sm" className="w-16">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="es">ES</SelectItem>
-          <SelectItem value="en">EN</SelectItem>
-        </SelectContent>
-      </Select>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={() => window.open(getExportUrl(id, fmt, lang), "_blank")}
-      >
-        Exportar
-      </Button>
-    </div>
-  )
 }
 
 export function RoomsTable({ token, rooms, onChanged }: RoomsTableProps) {
@@ -114,7 +76,8 @@ export function RoomsTable({ token, rooms, onChanged }: RoomsTableProps) {
                       Audiencia
                     </a>
                   </Button>
-                  <ExportControls id={room.id} />
+                  <OverlayConfigDialog id={room.id} />
+                  <ExportMenu id={room.id} status={room.status} />
                 </div>
               </TableCell>
             </TableRow>

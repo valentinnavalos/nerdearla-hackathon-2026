@@ -84,3 +84,7 @@ export function getExportUrl(id: string, fmt: ExportFormat, lang: Lang = "es"): 
   const params = fmt === "md" ? "" : `?lang=${encodeURIComponent(lang)}`
   return `/api/sessions/${encodeURIComponent(id)}/export.${fmt}${params}`
 }
+
+export function getNetworkInfo(): Promise<{ lan_ip: string | null }> {
+  return request("/api/network-info")
+}
