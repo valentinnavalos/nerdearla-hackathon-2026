@@ -135,14 +135,30 @@ button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-
   font-weight: 600;
   overflow-wrap: anywhere;
 }
-.line { margin: 0; max-width: 32ch; }
+.line {
+  margin: 0;
+  max-width: 32ch;
+  transition: opacity 0.2s ease, transform 0.25s ease, color 0.3s ease;
+}
 .line:not(:last-child) { opacity: 0.7; }
-.line.interim { color: var(--interim); font-style: italic; font-weight: 500; }
+.line.interim {
+  color: var(--interim);
+  font-style: italic;
+  font-weight: 500;
+  opacity: 1; /* the line being spoken right now stays fully visible even mid-sentence */
+}
+.line.entering { opacity: 0; transform: translateY(0.4em); }
+@keyframes settle-flash { from { color: var(--accent); } to { color: var(--text); } }
+.line.settled:not(.interim) { animation: settle-flash 0.5s ease-out; }
 
 /* high contrast: pure black/white, no dimming */
 body.contrast { --bg: #000; --surface: #000; --border: #fff; --text: #fff; --interim: #d0d0d0; }
 body.contrast .line:not(:last-child) { opacity: 1; }
 body.contrast .captions { font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  .line { transition: none; }
+  .line.settled:not(.interim) { animation: none; }
+}
 
 @media (min-width: 768px) {
   .line { max-width: 40ch; }

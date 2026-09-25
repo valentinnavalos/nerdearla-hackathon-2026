@@ -30,9 +30,9 @@
 | T1.9 | `SessionManager` + `Session` + pub/sub | B | 40 min | P0 | 1 | ✅ |
 | T1.10 | `ReplayEngine` + jsonl de ejemplo | B | 20 min | P0 | 1 | ✅ |
 | T1.11 | WS de captions | B | 20 min | P0 | 1 | ✅ |
-| T1.12 | Página de audiencia v0 | B | 40 min | P0 | 1 | 🟡 |
-| T1.13 | Dockerfile HF + primer deploy | B | 40 min | P0 | 1 | 🟡 |
-| T1.14 | Integración checkpoint H3.5 | AB | 15 min | P0 | 1 | 🟡 |
+| T1.12 | Página de audiencia v0 | B | 40 min | P0 | 1 | ✅ |
+| T1.13 | Dockerfile HF + primer deploy | B | 40 min | P0 | 1 | ⛔ |
+| T1.14 | Integración checkpoint H3.5 | AB | 15 min | P0 | 1 | ✅ |
 | T2.1 | Rotación + resiliencia del runner | A | 1.5 h | P0 | 2 | |
 | T2.2 | Aislamiento multi-sala | A | 25 min | P0 | 2 | |
 | T2.3 | Persistencia (`captions.jsonl`, `meta.json`) | A | 20 min | P0 | 2 | 🟡 |
@@ -455,7 +455,7 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 
 #### T1.12 · Página de audiencia v0 — B · 40 min · P0 · depende de T1.11
 
-**Estado:** 🟡 Hecha — probada en Chromium headless con viewport de celular: lista, interim → final, cambio de idioma sin recargar, A−/A+, alto contraste, reconexión con backoff, sala inexistente. Falta probarla desde un celular real (después del deploy).
+**Estado:** ✅ Completo — probada además desde un celular real por LAN (`make docker-run`, `DEMO_FILE=samples/es_talk_2min.mp3`): lista, interim → final, cambio de idioma sin recargar, A−/A+, alto contraste y reconexión funcionan. Se corrigió `render()` en `js/captions.js` (reusaba nodos por `seg` en vez de `replaceChildren` completo) y se agregaron transiciones en `style.css` (fade-in de línea nueva, flash de "asentado" al pasar de interim a final) porque el primer pase se sentía como un scroll brusco de texto sin jerarquía visual.
 
 **Funcional:** cada persona elige sala e idioma y lee subtítulos en su celular.
 
@@ -472,7 +472,7 @@ python -c "from google.genai import types; print(types.TranslationConfig, types.
 
 #### T1.13 · Dockerfile HF + primer deploy — B · 40 min · P0
 
-**Estado:** 🟡 Dockerfile listo y probado en local (`make docker-build/test/run`); frontmatter en el README; `make deploy` usa `hf upload`. Falta crear el Space, cargar los secrets y deployar.
+**Estado:** ⛔ Bloqueado — Dockerfile listo y probado en local (`make docker-build/test/run`), frontmatter en el README, `make deploy` usa `hf upload`. Al intentar crear el Space (`hf repo create ... --type space --space-sdk docker --flavor cpu-basic`) Hugging Face devolvió `402 Payment Required`: **los Spaces Docker ya no son gratis en `cpu-basic`, requieren suscripción PRO** (esto contradice el supuesto de "CPU basic, gratis" de este documento y de `PLAN.md`). Falta decidir: pagar PRO, migrar a un SDK gratuito (implicaría reescribir el backend, no es viable dado que depende de FastAPI/ffmpeg/Docker) o buscar un host alternativo. Mientras tanto, T1.12 y T1.14 ya se validaron en local vía LAN (mismo Docker image), así que el desarrollo de Track A y B puede seguir sin esperar al deploy real.
 
 **Funcional:** que cualquiera pueda deployar con "Duplicate this Space".
 
@@ -504,7 +504,7 @@ license: mit
 
 #### T1.14 · Integración checkpoint H3.5 — AB · 15 min · P0
 
-**Estado:** 🟡 Validado en local — con `ENGINE=live_translate` y `DEMO_FILE=samples/es_talk_2min.mp3`, dos clientes WS (`?lang=es` y `?lang=en`) recibieron subtítulos solo de su idioma (26 y 24 finales, primer texto a los ~3,5 s, `STOPPED` al final). Falta repetirlo en el Space desde un celular (T1.13).
+**Estado:** ✅ Completo — con `ENGINE=live_translate` y `DEMO_FILE=samples/es_talk_2min.mp3`, dos clientes WS (`?lang=es` y `?lang=en`) recibieron subtítulos solo de su idioma (26 y 24 finales, primer texto a los ~3,5 s, `STOPPED` al final). Repetido contra el contenedor Docker real (`make docker-build` + `docker run`) accedido por LAN desde un celular: mismo resultado, cada stream aislado por idioma. Queda pendiente repetirlo específicamente **en el Space de HF** una vez resuelto el bloqueo de T1.13, pero no bloquea el resto de la Fase 2.
 
 **Técnico:** conectar el engine real de A dentro de `Session`; sala creada por código con un mp3 de `samples/`; deploy.
 

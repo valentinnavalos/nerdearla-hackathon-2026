@@ -19,6 +19,7 @@ export class CaptionView {
     this.onStatus = onStatus;
     this.onConnection = onConnection;
     this.segs = new Map(); // seg -> {text, final}; interim and final of a segment share the seg
+    this.els = new Map(); // seg -> rendered <p>, reused across renders for smooth updates
     this.ws = null;
     this.attempt = 0;
     this.retryTimer = null;
@@ -30,7 +31,8 @@ export class CaptionView {
     this.sessionId = sessionId;
     this.lang = lang;
     this.segs.clear();
-    this.render();
+    this.els.clear();
+    this.container.replaceChildren();
     this._open();
   }
 
@@ -49,6 +51,8 @@ export class CaptionView {
     ws.onopen = () => {
       this.attempt = 0;
       this.segs.clear(); // the server resends the history of finals
+      this.els.clear();
+      this.container.replaceChildren();
       this.onConnection("open");
     };
     ws.onmessage = (e) => this._handle(JSON.parse(e.data));
@@ -70,7 +74,8 @@ export class CaptionView {
     if (msg.type === "session_status") {
       if (msg.status === "RUNNING" && this.status && this.status !== "RUNNING") {
         this.segs.clear(); // restarted room: segment ids start over
-        this.render();
+        this.els.clear();
+        this.container.replaceChildren();
       }
       this.status = msg.status;
       this.onStatus(msg.status);
@@ -89,14 +94,42 @@ export class CaptionView {
 
   render() {
     const segs = [...this.segs.keys()].sort((a, b) => a - b).slice(-this.lines);
-    this.container.replaceChildren(
-      ...segs.map((seg) => {
-        const { text, final } = this.segs.get(seg);
-        const p = document.createElement("p");
-        p.className = final ? "line" : "line interim";
-        p.textContent = text;
-        return p;
-      }),
-    );
+    const wanted = new Set(segs);
+
+    // Drop elements for segments no longer shown (scrolled out).
+    for (const [seg, el] of this.els ?? (this.els = new Map())) {
+      if (!wanted.has(seg)) {
+        el.remove();
+        this.els.delete(seg);
+      }
+    }
+
+    let prevEl = null;
+    for (const seg of segs) {
+      const { text, final } = this.segs.get(seg);
+      let el = this.els.get(seg);
+      const wasFinal = el ? el.dataset.final === "1" : null;
+      if (!el) {
+        el = document.createElement("p");
+        el.className = "line entering";
+        this.container.appendChild(el);
+        this.els.set(seg, el);
+        // next frame: trigger the enter transition
+        requestAnimationFrame(() => el.classList.remove("entering"));
+      } else if (prevEl ? el.previousElementSibling !== prevEl : el !== this.container.firstChild) {
+        // keep DOM order in sync with seg order (rare: happens after a room restart)
+        this.container.insertBefore(el, prevEl ? prevEl.nextSibling : this.container.firstChild);
+      }
+      el.textContent = text;
+      el.dataset.final = final ? "1" : "0";
+      el.classList.toggle("interim", !final);
+      if (final && wasFinal === false) {
+        // brief highlight when a line settles from interim to final
+        el.classList.remove("settled");
+        void el.offsetWidth; // restart the animation if it was still running
+        el.classList.add("settled");
+      }
+      prevEl = el;
+    }
   }
 }
