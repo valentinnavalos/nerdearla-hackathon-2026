@@ -5,16 +5,31 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.api import sessions, ws
 from backend.config import Settings, configure_logging, get_settings
 from backend.core.manager import CapacityError, SessionManager, SessionNotFound
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "web" / "dist"
 
 log = logging.getLogger("backend.app")
+
+
+class SPAStaticFiles(StaticFiles):
+    """Falls back to index.html on a 404 so React Router's client-side routes
+    (e.g. /admin, /watch/<id>) resolve on a hard navigation/refresh, not just
+    when reached via an in-app link."""
+
+    async def get_response(self, path: str, scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return await super().get_response("index.html", scope)
 
 
 def seed_demo(manager: SessionManager, settings: Settings) -> None:
@@ -74,4 +89,4 @@ async def _bad_value(request: Request, exc: ValueError) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")  # last: catch-all
+app.mount("/", SPAStaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")  # last: catch-all

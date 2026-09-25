@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.75rem;
+  --background: #0a0a0c;
+  --foreground: #f5f5f7;
+  --card: #17171b;
+  --card-foreground: #f5f5f7;
+  --popover: #17171b;
+  --popover-foreground: #f5f5f7;
+  --primary: #e63946;
+  --primary-foreground: #ffffff;
+  --secondary: #212126;
+  --secondary-foreground: #f5f5f7;
+  --muted: #212126;
+  --muted-foreground: #9a9aa3;
+  --accent: #212126;
+  --accent-foreground: #f5f5f7;
+  --destructive: #f4574a;
+  --border: #2c2c33;
+  --input: #2c2c33;
+  --ring: #e63946;
+  --caption-size: 2.2rem;
+}
+
+/* This app is dark-only by design (captions read best on a dark background),
+   so the theme tokens above are the only palette — no light-mode override. */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+}
+
+@keyframes caption-settle {
+  from {
+    color: var(--primary);
+  }
+  to {
+    color: inherit;
+  }
+}
+
+.animate-caption-settle {
+  animation: caption-settle 0.5s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-caption-settle {
+    animation: none;
+  }
+}

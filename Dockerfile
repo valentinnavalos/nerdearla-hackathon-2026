@@ -1,3 +1,12 @@
+# ---- frontend build stage ----
+FROM node:20-slim AS frontend-build
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+# ---- backend runtime stage ----
 FROM python:3.12-slim
 
 RUN apt-get update \
@@ -17,6 +26,7 @@ ENV HOME=/home/user \
 WORKDIR /home/user/app
 
 COPY --chown=user . .
+COPY --chown=user --from=frontend-build /app/web/dist ./web/dist
 
 EXPOSE 7860
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "7860", \

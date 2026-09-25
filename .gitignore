@@ -8,3 +8,5 @@ samples/*
 !samples/.gitkeep
 !samples/replay_demo.jsonl
 !samples/*.mp3
+web/node_modules/
+web/dist/

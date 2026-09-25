@@ -1,11 +1,22 @@
-.PHONY: dev test deploy cli docker-build docker-test docker-run
+.PHONY: dev test deploy cli docker-build docker-test docker-run web-install web-dev web-build
 
 IMAGE ?= nerdearla-captions
 ENV_FILE ?= .env
 HF_SPACE ?=
 
+# two-process dev workflow: this serves the API on :7860; `make web-dev` serves
+# the React app on :5173, proxying /api and /ws back to this process.
 dev:
 	uvicorn backend.app:app --reload --port 7860 --ws-ping-interval 20 --ws-ping-timeout 20
+
+web-install:
+	cd web && npm ci
+
+web-dev:
+	cd web && npm run dev
+
+web-build:
+	cd web && npm run build
 
 test:
 	pytest -q
@@ -17,7 +28,8 @@ deploy:
 	hf upload $(HF_SPACE) . . --repo-type=space \
 		--commit-message "deploy $$(git rev-parse --short HEAD)$$(git diff --quiet || echo -dirty)" \
 		--exclude ".git/*" --exclude ".env" --exclude ".venv/*" --exclude "data/*" \
-		--exclude "**/__pycache__/*" --exclude "samples/mp3/*"
+		--exclude "**/__pycache__/*" --exclude "samples/mp3/*" \
+		--exclude "web/node_modules/*" --exclude "web/dist/*"
 
 cli:
 	python -m backend.main_cli $(F)
