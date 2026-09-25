@@ -12,6 +12,7 @@ from typing import Callable
 
 from backend.core.events import CaptionEvent
 from backend.core.glossary import Glossary
+from backend.core.metrics import SessionMetrics
 from backend.core.persistence import CaptionWriter, MetaWriter, load_captions
 from backend.engine.base import Engine, SessionContext
 from backend.sources.base import FrameQueue, pump
@@ -87,6 +88,7 @@ class Session:
         self._writer: CaptionWriter | None = None
         self._meta_writer: MetaWriter | None = None
         self._engine: Engine | None = None
+        self._ctx: SessionContext | None = None
         self.log = logging.LoggerAdapter(logging.getLogger("backend.session"), {"session": id})
 
     def meta(self) -> dict:
@@ -178,6 +180,7 @@ class Session:
                 "captions_written": self._writer.written if self._writer else 0,
                 "write_errors": self._writer.write_errors if self._writer else 0,
                 "runner": self._runner_stats(),
+                "audio": self._ctx.metrics.snapshot() if self._ctx and self._ctx.metrics else None,
             },
         }
 
@@ -215,7 +218,8 @@ class Session:
         self._task.add_done_callback(lambda _: callback())
 
     async def _run(self, engine: Engine) -> None:
-        ctx = SessionContext(self.id, self.source_lang, self.target_lang, self.glossary)
+        ctx = SessionContext(self.id, self.source_lang, self.target_lang, self.glossary, metrics=SessionMetrics())
+        self._ctx = ctx
         producer: asyncio.Task | None = None
         watcher: asyncio.Task | None = None
         self._engine = engine

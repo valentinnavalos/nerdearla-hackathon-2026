@@ -6,6 +6,7 @@ from typing import Callable
 
 from backend.config import DEFAULT_GLOSSARY_PATH, Settings
 from backend.core.glossary import Glossary
+from backend.core.metrics import DailyQuota
 from backend.core.persistence import load_all_meta
 from backend.core.session import LANGS, Session, SessionStatus, slugify
 from backend.engine.base import Engine
@@ -34,6 +35,7 @@ class SessionManager:
         self.default_glossary = default_glossary or Glossary()
         self._sessions: dict[str, Session] = {}
         self._live_rooms: set[str] = set()  # rooms holding a Live slot, for their whole run
+        self._quota = DailyQuota(Path(settings.data_dir) / "quota.json")
 
     def create(
         self,
@@ -120,8 +122,12 @@ class SessionManager:
         session.start(engine)
         if engine.uses_live:
             self._live_rooms.add(session.id)
+            self._quota.increment()
             session.on_done(lambda: self._release_slot(session))
         return session
+
+    def quota_today(self) -> dict:
+        return {"used": self._quota.count_today(), "limit": self.settings.quota_live_sessions_per_day}
 
     def _release_slot(self, session: Session) -> None:
         if not session.running:  # a quick restart may already hold the slot again

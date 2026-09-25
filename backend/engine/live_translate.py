@@ -16,6 +16,25 @@ TICK_S = 0.2  # how often the idle rule of the segmenters is checked
 DEDUPE_TAIL_S = 2.5  # ring buffer of recently emitted text for the fresh-reconnect fallback (T2.1)
 
 
+class _MeteredFrames:
+    """Wraps `frames` to feed each one into SessionMetrics before yielding it.
+
+    Must stay re-iterable like FrameQueue itself (a fresh `__aiter__()` generator per
+    call): run_forever() (T2.1) re-consumes the same `frames` object across reconnects,
+    and a plain async-generator function would be exhausted/closed after the first one."""
+
+    def __init__(self, frames, ctx, now):
+        self._frames = frames
+        self._ctx = ctx
+        self._now = now
+
+    async def __aiter__(self):
+        async for frame in self._frames:
+            if self._ctx.metrics:
+                self._ctx.metrics.on_frame(frame.pcm, self._now())
+            yield frame
+
+
 class LiveTranslateEngine(Engine):
     """Camino 1: gemini-3.5-live-translate-preview, speech-to-speech translation.
     input_transcription = original, output_transcription = translation."""
@@ -85,11 +104,17 @@ class LiveTranslateEngine(Engine):
                 ))
 
         async def on_input_text(text: str, is_interim: bool) -> None:
+            if ctx.metrics:
+                if is_interim:
+                    ctx.metrics.on_partial(now())
+                else:
+                    ctx.metrics.on_final(now())
             pieces = orig.preview(text, now()) if is_interim else orig.feed(text, now())
             await out(pieces, ctx.source_lang, "orig")
 
         async def on_output_text(text: str) -> None:
             await out(trans.feed(text, now()), ctx.target_lang, "trans")
+
 
         async def on_error(exc: Exception) -> None:
             log.error("callback error %s: %s", type(exc).__name__, exc)
@@ -117,7 +142,7 @@ class LiveTranslateEngine(Engine):
         tick_task = asyncio.create_task(ticker())
         try:
             await runner.run_forever(
-                frames,
+                _MeteredFrames(frames, ctx, now),
                 rotate_after_s=self.rotate_after_s,
                 max_consecutive_failures=self.max_reconnect_failures,
                 backoffs=self.reconnect_backoffs,
