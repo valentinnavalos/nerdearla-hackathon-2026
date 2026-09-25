@@ -1,26 +1,19 @@
----
-title: Nerdearla Live Captions
-emoji: 🎙️
-sdk: docker
-app_port: 7860
-pinned: false
-license: mit
----
-
 # Nerdearla Live Captions
 
 Subtítulos y traducción EN ↔ ES en vivo para conferencias, con Gemini Live (free tier, costo cero). Una sala = una sesión Live que devuelve el original y la traducción; la audiencia elige sala e idioma desde el celular, con overlay listo para OBS/vMix y descargas de la transcripción al terminar.
 
 *(Captura o GIF pendiente — ver [T3.12](backend/docs/TASKS.md).)*
 
-Estado: motor Camino 1 (`live_translate`) en producción, sesiones con pub/sub por idioma, WS de subtítulos, vista de escenario con QR, panel de operador con monitoreo y exports, overlay para switchers y Dockerfile para HF Spaces. Knowledge Pack, página post-charla y exporter a NotebookLM todavía no están implementados (ver "Después de la charla" y [`backend/docs/TASKS.md`](backend/docs/TASKS.md)). Plan y decisiones de arquitectura: [`backend/docs/PLAN.md`](backend/docs/PLAN.md).
+Estado: motor Camino 1 (`live_translate`) en producción, sesiones con pub/sub por idioma, WS de subtítulos, vista de escenario con QR, panel de operador con monitoreo y exports, overlay para switchers y deploy en Render (Docker). Knowledge Pack, página post-charla y exporter a NotebookLM todavía no están implementados (ver "Después de la charla" y [`backend/docs/TASKS.md`](backend/docs/TASKS.md)). Plan y decisiones de arquitectura: [`backend/docs/PLAN.md`](backend/docs/PLAN.md).
+
+**Demo en vivo:** `https://<TU-SERVICIO>.onrender.com` — reemplazar por la URL real del servicio de Render antes de compartir (el free tier de Render duerme el servicio sin tráfico: la primera carga puede tardar ~30-50s en levantar).
 
 ## Probalo en 3 minutos
 
-1. En Hugging Face, abrí el Space y click en **"Duplicate this Space"** (deploy propio en 2 clics, sin tocar código).
-2. En tu copia, **Settings → Secrets**: cargá `GEMINI_API_KEY` (ver [cómo conseguir una sin billing](#cómo-crear-la-api-key-sin-billing)) y `ADMIN_TOKEN` (cualquier string, protege la consola).
-3. Abrí `https://TU-SPACE.hf.space/admin.html`, entrá con el `ADMIN_TOKEN` y creá una sala con fuente **Archivo (samples/)** apuntando a `samples/en_talk_3min.mp3`, arrancala.
-4. Abrí la vista de audiencia (`https://TU-SPACE.hf.space/?s=ID`) o el QR que muestra `stage.html` — los subtítulos en vivo aparecen enseguida.
+1. Abrí `https://<TU-SERVICIO>.onrender.com/admin.html`, entrá con el `ADMIN_TOKEN` del proyecto.
+2. Creá una sala con fuente **Archivo (samples/)** apuntando a `samples/en_talk_3min.mp3`, arrancala.
+3. Abrí la vista de audiencia (`https://<TU-SERVICIO>.onrender.com/?s=ID`) o el QR que muestra `stage.html` — los subtítulos en vivo aparecen enseguida.
+4. Para correr tu propia instancia: forkeá el repo y seguí [Deploy en Render](#deploy-en-render) más abajo (~5 min, solo necesitás una `GEMINI_API_KEY` sin billing).
 
 ## Correr en local
 
@@ -60,7 +53,7 @@ En Docker: `docker run --rm --env-file .env nerdearla-captions python -m backend
 
 ## Arquitectura
 
-Cada sala corre su propia tubería (una `asyncio.Task`), aislada del resto: si una falla no afecta a las demás. Todas comparten un único proceso FastAPI dentro de un Space (2 vCPU / 16 GB gratis). El frontend es una SPA React servida por el mismo FastAPI (`web/dist/`).
+Cada sala corre su propia tubería (una `asyncio.Task`), aislada del resto: si una falla no afecta a las demás. Todas comparten un único proceso FastAPI dentro de un container (Render free tier o Docker local). El frontend es una SPA React servida por el mismo FastAPI (`web/dist/`).
 
 ```mermaid
 flowchart LR
@@ -69,7 +62,7 @@ flowchart LR
   WATCH["📱 Público<br/>/watch/:id"]
   OVER["📺 OBS / vMix<br/>/overlay/:id"]
 
-  subgraph APP["☁️ FastAPI · un proceso (Docker / HF Space)"]
+  subgraph APP["☁️ FastAPI · un proceso (Docker / Render Web Service)"]
     direction TB
     API["api/<br/>REST /api/sessions·... + WS /ws/ingest · /ws/captions · /ws/admin"]
     MGR["core/manager.py<br/>SessionManager"]
@@ -178,15 +171,17 @@ Diagrama completo y alternativas evaluadas: [`backend/docs/PLAN.md` §2.4](backe
 2. Generá la API key desde ese proyecto y verificá en **AI Studio → Projects** que figure como **Free**.
 3. Para chequear cuotas y límites de sesiones concurrentes: **AI Studio → Rate limits** (RPM, TPM, RPD y sesiones Live simultáneas). Google no publica el cupo real de sesiones Live por adelantado — medilo con `scripts/live_probe.py` (ver [Mediciones](#mediciones-t14)) antes de un evento grande.
 
-## Deploy en Hugging Face Spaces
+## Deploy en Render
 
-1. Crear un Space: SDK **Docker**, hardware **CPU basic** (gratis).
-2. Settings → **Secrets**: `GEMINI_API_KEY`, `ADMIN_TOKEN`. **Variables**: `ENGINE` y, para el checkpoint, `DEMO_FILE=samples/en_talk_3min.mp3`.
-3. `pip install -U huggingface_hub` y `hf auth login`.
-4. `make deploy HF_SPACE=<usuario>/<space>`.
-5. Abrir `https://<usuario>-<space>.hf.space/healthz`.
+El proyecto corre como un **Docker Web Service** en [Render](https://render.com) (free tier), usando el `Dockerfile` del repo tal cual (multi-stage: build del frontend con Node + runtime Python 3.12, `uvicorn` escuchando en `0.0.0.0:7860`).
 
-`make deploy` sube el árbol de trabajo con `hf upload` (sin historial git: HF rechaza pushes con binarios fuera de Xet/LFS y el historial tiene los PNG de `backend/docs/diagrams`). Excluye `.env`, `data/` y `samples/mp3/`.
+1. En Render: **New → Web Service**, conectar el repo de GitHub (fork o el original).
+2. **Environment**: Docker (detecta el `Dockerfile` solo). Si Render pide un puerto explícito, usar `7860` (el que expone el `Dockerfile`).
+3. **Environment Variables**: `GEMINI_API_KEY` (de un proyecto **sin billing**, ver más abajo) y `ADMIN_TOKEN` (cualquier string, protege la consola). Opcional: `DEMO_FILE=samples/en_talk_3min.mp3` para que arranque una sala demo sola.
+4. Deploy. Render buildea la imagen y la levanta; el servicio queda en `https://<nombre-del-servicio>.onrender.com`.
+5. Verificar con `GET https://<nombre-del-servicio>.onrender.com/healthz` → `{"ok": true, "engine": "live_translate"}`.
+
+**Free tier de Render:** el servicio se duerme sin tráfico y tarda ~30-50s en volver a levantar con la primera request — normal, no es un error de deploy. No hay disco persistente entre reinicios (igual que en Spaces): `data/` (sesiones, exports) no sobrevive un redeploy o un sleep/wake.
 
 ## Variables de entorno
 
@@ -199,7 +194,7 @@ Diagrama completo y alternativas evaluadas: [`backend/docs/PLAN.md` §2.4](backe
 | `LIVE_TRANSLATE_MODEL` | `gemini-3.5-live-translate-preview` | Camino 1 |
 | `TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | Camino 2 |
 | `KP_MODEL` | `gemini-3.1-flash-lite` | Knowledge Pack, ask, pasada final |
-| `MAX_CONCURRENT_LIVE` | `2` | Tope de sesiones Live abiertas en el proceso |
+| `MAX_CONCURRENT_LIVE` | `4` | Tope de sesiones Live abiertas en el proceso (medido y validado sin degradación hasta 2 simultáneas, ver [Mediciones](#mediciones-t14)) |
 | `ROTATE_AFTER_S` | `540` | Rotación preventiva (9 min) |
 | `QUOTA_LIVE_SESSIONS_PER_DAY` | `0` | Cupo diario (0 = no mostrar) |
 | `NOTEBOOKLM_ENABLED` | `0` | Exporter no oficial (P2) |
@@ -212,6 +207,15 @@ Diagrama completo y alternativas evaluadas: [`backend/docs/PLAN.md` §2.4](backe
 | `DEMO_LANG` | `en` | Idioma de la charla de `DEMO_FILE` |
 | `DEMO_LOOP` | `0` | `1` = repetir `DEMO_FILE` (gasta cuota sin parar) |
 
+## Fuentes de audio
+
+El sistema tiene dos fuentes implementadas y probadas (`backend/sources/`), seleccionables por sala (`POST /api/sessions`, campo `source: "mic" | "file"` — no es una env var global):
+
+- **`FileSource`** (`backend/sources/file_source.py`): lee un archivo (`samples/*.mp3`), lo normaliza con ffmpeg a PCM y lo pacea en tiempo real (o lo más rápido posible con `REALTIME=0`). Es la fuente para pruebas, demos y CI — no depende del micrófono ni de conexión estable.
+- **`MicSource`** (`backend/sources/mic_source.py`): recibe PCM en vivo desde el browser vía `getUserMedia` + `AudioWorklet` (`js/pcm-worklet.js`, remuestreo a 16kHz) sobre `WS /ws/ingest/{id}`. Usarla desde `stage.html`, eligiendo fuente **Micrófono** al crear la sala.
+
+**No existe una `YouTubeLiveSource`** en el código ni está diseñada en los docs de planificación (`backend/docs/PLAN.md`, `TASKS.md`) — solo se documenta lo opuesto: exportar la transcripción de una sala (vía `FileSource` sobre el audio de un video) para subirla como subtítulos a un video ya publicado en YouTube. Para usar un video de YouTube como fuente en vivo hoy, el camino real es descargar/extraer su audio a un archivo y correrlo con `FileSource` — no hay ingesta directa de un stream de YouTube.
+
 ## Operación en un evento
 
 **Mic:** en la notebook que corre `stage.html`, conectá la placa/consola de audio como dispositivo de entrada de Chrome (o el mic de sala vía cable a la placa) y elegilo al crear la sala con fuente **Micrófono**. La captura usa `getUserMedia` con `echoCancellation`, `noiseSuppression` y `autoGainControl` en `false`: esos filtros degradan una señal que ya viene limpia de consola.
@@ -223,7 +227,7 @@ Diagrama completo y alternativas evaluadas: [`backend/docs/PLAN.md` §2.4](backe
 **Overlay para OBS/vMix (T3.1):** `index.html` acepta parámetros extra para usarse como fuente de navegador en un switcher, quemando los subtítulos traducidos sobre el video en vivo:
 
 ```
-https://TU-SPACE.hf.space/?s=ID&lang=es&overlay=1&bg=transparent&size=L&lines=2
+https://<TU-SERVICIO>.onrender.com/?s=ID&lang=es&overlay=1&bg=transparent&size=L&lines=2
 ```
 
 | Parámetro | Valores | Qué hace |
@@ -254,7 +258,7 @@ GET /api/sessions/{id}/export.{srt,vtt,txt,md}?lang={en,es}
 
 ## Self-host
 
-Sin depender de Hugging Face, en tu propia máquina/mini PC:
+Sin depender de un servicio cloud, en tu propia máquina/mini PC:
 
 ```bash
 cp .env.example .env
@@ -265,11 +269,23 @@ y exponerlo a internet con un túnel gratuito, por ejemplo **Cloudflare Tunnel**
 
 Hoy el deploy es un único container Docker (sin base de datos: todo el estado vive en `data/` y en memoria del proceso); un `docker-compose.yml` dedicado para self-host está en el backlog (T3.10, pendiente) — mientras tanto, el comando de arriba alcanza para levantarlo solo.
 
+## Probar con 2+ sesiones simultáneas
+
+Cada sala corre en su propio `asyncio.Task` dentro del mismo proceso (`core/session.py` + `core/manager.py`) — no hay nada que levantar aparte para probar concurrencia:
+
+- **Desde la consola:** `/admin.html`, crear dos salas (distinto `source_lang`, por ejemplo una EN y otra ES) y arrancar ambas; el panel en vivo (WS `/ws/admin`) muestra uptime/latencia/errores por sala. Si ya hay `MAX_CONCURRENT_LIVE` salas Live abiertas, el `Start` de una sala extra devuelve un error claro (`SessionManager`, `core/manager.py:121`) en vez de degradar todas.
+- **Desde CLI, sin consola:** `python -m scripts.runner_probe samples/mp3/a.mp3:en samples/es_talk_2min.mp3:es` corre 2 salas con el engine real en un solo proceso y loguea fragmentos/latencia por sala (usado para medir la concurrencia real, ver [Mediciones](#mediciones-t14)).
+
 ## Cómo escalar
 
-- **Un Space aguanta varias salas:** el trabajo pesado lo hace Gemini; el container solo mueve audio y texto. El techo real es el cupo de sesiones Live del proyecto de Google (no publicado — medilo en AI Studio → Rate limits y con `scripts/live_probe.py`; ver [Mediciones](#mediciones-t14)). `MAX_CONCURRENT_LIVE` hace que el `SessionManager` rechace el Start de una sala de más con un error claro, en vez de degradar todas.
-- **Más salas = más Spaces:** un Space por grupo de salas, sin estado compartido entre ellos.
-- **Key por sala:** solo suma cupo real si cada key es de un proyecto distinto (los límites son por proyecto, no por key) — revisar los términos de uso de Google antes de usar varias cuentas propias.
+**Arquitectura actual:** 1 sesión Live = 1 `asyncio.Task` en un único proceso/container. El techo real no es de cómputo sino el cupo de sesiones Live simultáneas del proyecto de Google (no publicado — medilo en AI Studio → Rate limits y con `scripts/live_probe.py`). `MAX_CONCURRENT_LIVE` (default `4`, validado sin degradación hasta 2) hace que el `SessionManager` rechace el Start de una sala de más con un error claro.
+
+**Caminos de escalado, en orden de qué tan implementados están:**
+
+- **Más salas = más servicios:** un servicio de Render (o un container Docker) por grupo de salas, sin estado compartido entre ellos — funciona hoy, sin código nuevo.
+- **Key por sala:** solo suma cupo real si cada key es de un proyecto de Google distinto (los límites son por proyecto, no por key) — revisar los términos de uso de Google antes de usar varias cuentas propias.
+- **Motor híbrido por sala (diseñado, no implementado):** Gemini Live en N salas prioritarias + transcripción/traducción en el propio navegador (Web Speech API de Chrome + Translator API de Chrome) para el resto, a costo $0. Documentado en detalle en [`backend/docs/alternativas-sesiones/OPCIONES-ESCALADO.md`](backend/docs/alternativas-sesiones/OPCIONES-ESCALADO.md) (opción D, ~3h de trabajo estimado) — requiere elegir el engine por sala, algo que hoy `factory.py` no soporta (usa un único `ENGINE` global). **No está en el código todavía.**
+- **N workers/containers:** repartir salas entre varios procesos/instancias detrás de un balanceador, en vez de un solo proceso — no implementado; es el paso natural si el motor híbrido no alcanza y hace falta más cómputo (no más cupo de Gemini).
 - **Límites del free tier:** costo cero con varias salas en paralelo **no está garantizado** — a más concurrencia, más chance de degradación (ver Mediciones).
 - **Modo 100% local (roadmap):** reemplazar Gemini Live por Whisper + Gemma/Argos corriendo en hardware propio — no implementado, es la salida para cuando el free tier no alcanza.
 
