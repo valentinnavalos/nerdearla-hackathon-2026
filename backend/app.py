@@ -41,6 +41,10 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.manager = SessionManager(settings)
     try:
+        app.state.manager.reload()
+    except Exception as e:  # a bad meta.json must never stop the app from starting
+        log.warning("session reload failed: %s: %s", type(e).__name__, e)
+    try:
         seed_demo(app.state.manager, settings)
     except Exception as e:  # the room is already in ERROR with the reason; keep serving
         log.warning("demo room could not start: %s: %s", type(e).__name__, e)

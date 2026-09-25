@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import time
 from typing import Any, AsyncIterable, Awaitable, Callable
 
@@ -51,10 +52,23 @@ class LiveSessionRunner:
         self.log = log or _log
         self._last_msg_at = 0.0
         self._connected_at = 0.0
-        self.stats: dict[str, Any] = {}
+        # rotation/resilience counters (T2.1): survive across run() calls, unlike the
+        # per-connection fields below, so run_forever() can report cumulative totals.
+        self._rotation_stats: dict[str, Any] = {
+            "state": "RUNNING",
+            "rotations": 0,
+            "resumptions": 0,
+            "fresh_sessions": 0,
+            "reconnects": 0,
+            "errors": 0,
+            "last_error": None,
+        }
+        self.stats: dict[str, Any] = dict(self._rotation_stats)
 
-    async def run(self, frames: AsyncIterable[AudioFrame]) -> None:
-        """Return when the source ends and the server goes quiet; raise if the session dies."""
+    async def run(self, frames: AsyncIterable[AudioFrame], resumption_handle: str | None = None) -> None:
+        """Connect once and run until the source ends and the server goes quiet;
+        raise if the session dies. `resumption_handle`, if given, resumes a prior
+        session instead of starting a fresh one (T2.1)."""
         self.stats = {
             "connect_ms": None,
             "frames_sent": 0,
@@ -64,10 +78,14 @@ class LiveSessionRunner:
             "last_msg_at": None,  # time.monotonic()
             "go_away_time_left": None,
             "generation_complete": 0,
-            "resumption_handle": None,  # latest one, for resuming the session (T2.1)
+            "resumption_handle": resumption_handle,  # latest one, for resuming the session (T2.1)
             "last_consumed_index": None,
             "dispatch_ms_max": 0.0,  # callbacks must never block the receive loop
         }
+        self.stats.update(self._rotation_stats)
+        self.config.session_resumption = types.SessionResumptionConfig(
+            transparent=True, handle=resumption_handle
+        )
         t_connect = time.monotonic()
         try:
             async with self.client.aio.live.connect(model=self.model, config=self.config) as session:
@@ -190,3 +208,97 @@ class LiveSessionRunner:
                 await self.on_error(e)
             else:
                 raise
+
+    async def run_forever(
+        self,
+        frames: AsyncIterable[AudioFrame],
+        rotate_after_s: float,
+        max_consecutive_failures: int = 10,
+        backoffs: tuple[float, ...] = (1, 2, 4, 8, 16),
+        backoff_cap: float = 30.0,
+        on_state: Callable[[str], Awaitable[None]] | None = None,
+    ) -> None:
+        """Keep the room subtitled across the ~10 min connection lifetime of a single
+        Live session (T2.1): rotate preventively every `rotate_after_s` (or sooner on
+        GoAway) using session resumption, and reconnect with backoff on failure.
+        Returns only when `frames` itself is exhausted (the room's source ended);
+        raises after `max_consecutive_failures` reconnect attempts in a row fail."""
+        handle: str | None = None
+        consecutive_failures = 0
+        go_away_event = asyncio.Event()
+        user_on_go_away = self.on_go_away
+
+        async def _on_go_away(time_left) -> None:
+            if user_on_go_away:
+                await user_on_go_away(time_left)
+            go_away_event.set()
+
+        self.on_go_away = _on_go_away
+
+        async def set_state(state: str) -> None:
+            self._rotation_stats["state"] = state
+            self.stats["state"] = state
+            if on_state:
+                await on_state(state)
+
+        try:
+            while True:
+                go_away_event.clear()
+                rotate_task = asyncio.create_task(asyncio.sleep(rotate_after_s))
+                go_away_task = asyncio.create_task(go_away_event.wait())
+                run_task = asyncio.create_task(self.run(frames, resumption_handle=handle))
+                done, _ = await asyncio.wait(
+                    {rotate_task, go_away_task, run_task}, return_when=asyncio.FIRST_COMPLETED
+                )
+
+                if run_task in done:
+                    rotate_task.cancel()
+                    go_away_task.cancel()
+                    exc = run_task.exception()
+                    if exc is None:
+                        # frames source itself ended (file done, not looping) - stop cleanly.
+                        await set_state("RUNNING")
+                        return
+                    consecutive_failures += 1
+                    self._rotation_stats["errors"] += 1
+                    self._rotation_stats["last_error"] = f"{type(exc).__name__}: {exc}"
+                    if consecutive_failures >= max_consecutive_failures:
+                        await set_state("ERROR")
+                        raise exc
+                    await set_state("RECONNECTING")
+                    handle = self.stats.get("resumption_handle")
+                    if handle:
+                        self._rotation_stats["resumptions"] += 1
+                    else:
+                        self._rotation_stats["fresh_sessions"] += 1
+                    self._rotation_stats["reconnects"] += 1
+                    delay = backoffs[min(consecutive_failures - 1, len(backoffs) - 1)]
+                    delay = min(delay, backoff_cap) + random.uniform(0, delay * 0.1)
+                    self.log.warning("live reconnecting in %.1fs (attempt %d): %s",
+                                      delay, consecutive_failures, self._rotation_stats["last_error"])
+                    await asyncio.sleep(delay)
+                    continue
+
+                # rotate_task or go_away_task finished first: proactive rotation.
+                for t in (rotate_task, go_away_task):
+                    if t not in done:
+                        t.cancel()
+                await set_state("ROTATING")
+                run_task.cancel()
+                try:
+                    await run_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    self.log.warning("live: error while cancelling for rotation: %s", e)
+                consecutive_failures = 0
+                handle = self.stats.get("resumption_handle")
+                self._rotation_stats["rotations"] += 1
+                if handle:
+                    self._rotation_stats["resumptions"] += 1
+                else:
+                    self._rotation_stats["fresh_sessions"] += 1
+                self.log.info("live rotating (resumed=%s, rotations=%d)",
+                               bool(handle), self._rotation_stats["rotations"])
+        finally:
+            self.on_go_away = user_on_go_away

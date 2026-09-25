@@ -5,6 +5,7 @@ from typing import AsyncIterable
 
 from google.genai import types
 
+from backend.core.dedupe import dedupe_overlap
 from backend.core.events import CaptionEvent
 from backend.core.segmenter import Piece, Segmenter
 from backend.engine.base import Emit, Engine, SessionContext
@@ -12,6 +13,7 @@ from backend.engine.live_runner import LiveSessionRunner
 from backend.sources.base import AudioFrame
 
 TICK_S = 0.2  # how often the idle rule of the segmenters is checked
+DEDUPE_TAIL_S = 2.5  # ring buffer of recently emitted text for the fresh-reconnect fallback (T2.1)
 
 
 class LiveTranslateEngine(Engine):
@@ -20,10 +22,21 @@ class LiveTranslateEngine(Engine):
 
     uses_live = True
 
-    def __init__(self, api_key: str, model: str, idle_s: float = 2.0):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        idle_s: float = 2.0,
+        rotate_after_s: float = 540,
+        max_reconnect_failures: int = 10,
+        reconnect_backoffs: tuple[float, ...] = (1, 2, 4, 8, 16),
+    ):
         self.api_key = api_key
         self.model = model
         self.idle_s = idle_s  # silence that closes a segment; ~1 s fragment cadence (max 2 s) per T1.4
+        self.rotate_after_s = rotate_after_s
+        self.max_reconnect_failures = max_reconnect_failures
+        self.reconnect_backoffs = reconnect_backoffs
         self.runner: LiveSessionRunner | None = None  # exposes runner.stats (T2.4)
 
     @staticmethod
@@ -42,13 +55,24 @@ class LiveTranslateEngine(Engine):
         log = logging.LoggerAdapter(logging.getLogger("backend.engine"), {"session": ctx.session_id})
         t_start = time.monotonic()
         orig, trans = Segmenter(idle_s=self.idle_s), Segmenter(idle_s=self.idle_s)
+        # dedupe fallback (T2.1): after any reconnect that isn't a transparent resumption,
+        # the next bit of text on each track may repeat what was already emitted.
+        tail = {"orig": "", "trans": ""}
+        pending_dedupe = {"orig": False, "trans": False}
 
         def now() -> float:
             return time.monotonic() - t_start
 
         async def out(pieces: list[Piece], lang: str, kind: str) -> None:
             for p in pieces:
-                text = ctx.glossary.apply(p.text) if ctx.glossary else p.text
+                text = p.text
+                if pending_dedupe[kind] and text:
+                    text = dedupe_overlap(tail[kind], text)
+                    pending_dedupe[kind] = False
+                if not text:
+                    continue
+                tail[kind] = (tail[kind] + " " + text)[-200:]
+                text = ctx.glossary.apply(text) if ctx.glossary else text
                 await emit(CaptionEvent(
                     session_id=ctx.session_id,
                     lang=lang,
@@ -70,6 +94,11 @@ class LiveTranslateEngine(Engine):
         async def on_error(exc: Exception) -> None:
             log.error("callback error %s: %s", type(exc).__name__, exc)
 
+        async def on_state(state: str) -> None:
+            if state in ("ROTATING", "RECONNECTING"):
+                pending_dedupe["orig"] = True
+                pending_dedupe["trans"] = True
+
         async def ticker() -> None:
             while True:
                 await asyncio.sleep(TICK_S)
@@ -87,7 +116,13 @@ class LiveTranslateEngine(Engine):
         )
         tick_task = asyncio.create_task(ticker())
         try:
-            await runner.run(frames)
+            await runner.run_forever(
+                frames,
+                rotate_after_s=self.rotate_after_s,
+                max_consecutive_failures=self.max_reconnect_failures,
+                backoffs=self.reconnect_backoffs,
+                on_state=on_state,
+            )
         finally:
             tick_task.cancel()
             await out(orig.flush(now()), ctx.source_lang, "orig")

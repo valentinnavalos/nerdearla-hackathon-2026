@@ -6,7 +6,8 @@ from typing import Callable
 
 from backend.config import DEFAULT_GLOSSARY_PATH, Settings
 from backend.core.glossary import Glossary
-from backend.core.session import LANGS, Session, slugify
+from backend.core.persistence import load_all_meta
+from backend.core.session import LANGS, Session, SessionStatus, slugify
 from backend.engine.base import Engine
 from backend.engine.factory import create_engine
 
@@ -60,10 +61,29 @@ class SessionManager:
             loop=loop,
             glossary=Glossary.merge(self.default_glossary, session_glossary),
             realtime=self.settings.realtime,
-            captions_path=Path(self.settings.data_dir) / "sessions" / session_id / "captions.jsonl",
+            captions_path=self._captions_path(session_id),
+            meta_path=self._meta_path(session_id),
         )
         self._sessions[session.id] = session
         return session
+
+    def _captions_path(self, session_id: str) -> Path:
+        return Path(self.settings.data_dir) / "sessions" / session_id / "captions.jsonl"
+
+    def _meta_path(self, session_id: str) -> Path:
+        return Path(self.settings.data_dir) / "sessions" / session_id / "meta.json"
+
+    def reload(self) -> None:
+        """Bring back rooms that finished in a previous process (T2.3): only STOPPED/ERROR
+        rooms are restored (a RUNNING room's Live session died with the old process)."""
+        for meta in load_all_meta(self.settings.data_dir):
+            session_id = meta.get("id")
+            if not session_id or session_id in self._sessions:
+                continue
+            if meta.get("status") not in (SessionStatus.STOPPED.value, SessionStatus.ERROR.value):
+                continue
+            session = Session.from_meta(meta, self._captions_path(session_id), self._meta_path(session_id))
+            self._sessions[session.id] = session
 
     def _unique_id(self, base: str) -> str:
         candidate, n = base, 2

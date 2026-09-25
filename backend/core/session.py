@@ -12,7 +12,7 @@ from typing import Callable
 
 from backend.core.events import CaptionEvent
 from backend.core.glossary import Glossary
-from backend.core.persistence import CaptionWriter
+from backend.core.persistence import CaptionWriter, MetaWriter, load_captions
 from backend.engine.base import Engine, SessionContext
 from backend.sources.base import FrameQueue, pump
 from backend.sources.file_source import FileSource
@@ -59,6 +59,8 @@ class Session:
         glossary: Glossary | None = None,
         realtime: bool = True,
         captions_path: Path | None = None,  # finals are appended here (T2.3)
+        meta_path: Path | None = None,  # room snapshot for reload-on-restart (T2.3)
+        engine_name: str = "",
     ):
         self.id = id
         self.title = title
@@ -71,6 +73,8 @@ class Session:
         self.glossary = glossary or Glossary()
         self.realtime = realtime
         self.captions_path = captions_path
+        self.meta_path = meta_path
+        self.engine_name = engine_name
         self.status = SessionStatus.CREATED
         self.started_at: float | None = None
         self.stopped_at: float | None = None
@@ -81,7 +85,60 @@ class Session:
         self._subscribers: dict[str, set[asyncio.Queue]] = {lang: set() for lang in LANGS}
         self._task: asyncio.Task | None = None
         self._writer: CaptionWriter | None = None
+        self._meta_writer: MetaWriter | None = None
+        self._engine: Engine | None = None
         self.log = logging.LoggerAdapter(logging.getLogger("backend.session"), {"session": id})
+
+    def meta(self) -> dict:
+        """Snapshot persisted to meta.json (T2.3); Knowledge Pack/NotebookLM keys are stubs for Phase 3."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "speaker": self.speaker,
+            "source_lang": self.source_lang,
+            "target_lang": self.target_lang,
+            "source": self.source,
+            "file": self.file,
+            "loop": self.loop,
+            "engine": self.engine_name,
+            "glossary": self.glossary.to_dict() if self.glossary else None,
+            "status": self.status.value,
+            "started_at": self.started_at,
+            "stopped_at": self.stopped_at,
+            "last_error": self.last_error,
+            "kp_status": None,
+            "notebooklm_url": None,
+        }
+
+    @classmethod
+    def from_meta(cls, meta: dict, captions_path: Path, meta_path: Path) -> "Session":
+        """Rebuild a finished room from its meta.json + captions.jsonl for reload-on-restart (T2.3).
+        Reload never resumes a RUNNING room - a dead process can't reconnect a Live session."""
+        session = cls(
+            id=meta["id"],
+            title=meta.get("title", meta["id"]),
+            speaker=meta.get("speaker", ""),
+            source_lang=meta.get("source_lang", "en"),
+            source=meta.get("source", "file"),
+            file=meta.get("file"),
+            loop=meta.get("loop", False),
+            glossary=Glossary(**meta["glossary"]) if meta.get("glossary") else None,
+            captions_path=captions_path,
+            meta_path=meta_path,
+            engine_name=meta.get("engine", ""),
+        )
+        status = meta.get("status")
+        session.status = SessionStatus(status) if status in (SessionStatus.STOPPED.value, SessionStatus.ERROR.value) \
+            else SessionStatus.STOPPED
+        session.started_at = meta.get("started_at")
+        session.stopped_at = meta.get("stopped_at")
+        session.last_error = meta.get("last_error")
+        for msg in load_captions(captions_path):
+            lang = msg.get("lang")
+            if lang in LANGS:
+                session._history[lang].append(msg)
+                session.events += 1
+        return session
 
     @property
     def running(self) -> bool:
@@ -120,8 +177,13 @@ class Session:
                 "listeners": self.listeners(),
                 "captions_written": self._writer.written if self._writer else 0,
                 "write_errors": self._writer.write_errors if self._writer else 0,
+                "runner": self._runner_stats(),
             },
         }
+
+    def _runner_stats(self) -> dict | None:
+        runner = getattr(self._engine, "runner", None)
+        return dict(runner.stats) if runner is not None else None
 
     # --- lifecycle -----------------------------------------------------------
 
@@ -137,10 +199,15 @@ class Session:
         self.started_at = time.time()
         self.stopped_at = None
         self.last_error = None
+        self.engine_name = type(engine).__name__
         self._publish_status()
         if self.captions_path is not None:
             self._writer = CaptionWriter(self.captions_path, self.log)
             self._writer.start()
+        if self.meta_path is not None:
+            self._meta_writer = MetaWriter(self.meta_path, self.log)
+            self._meta_writer.start()
+            self._meta_writer.put(self.meta())
         self._task = asyncio.create_task(self._run(engine), name=f"session:{self.id}")
 
     def on_done(self, callback: Callable[[], None]) -> None:
@@ -150,6 +217,8 @@ class Session:
     async def _run(self, engine: Engine) -> None:
         ctx = SessionContext(self.id, self.source_lang, self.target_lang, self.glossary)
         producer: asyncio.Task | None = None
+        watcher: asyncio.Task | None = None
+        self._engine = engine
         try:
             frames = _no_frames()
             if engine.needs_audio:
@@ -159,6 +228,8 @@ class Session:
                 frames = self._frames
             source_desc = (self.file or self.source) if engine.needs_audio else "-"
             self.log.info("started: engine=%s source=%s", type(engine).__name__, source_desc)
+            if getattr(engine, "uses_live", False):
+                watcher = asyncio.create_task(self._watch_runner_state(engine))
             await engine.run(frames, self.emit, ctx)
             if producer and producer.done() and not producer.cancelled() and producer.exception():
                 raise producer.exception()
@@ -173,8 +244,34 @@ class Session:
         finally:
             if producer:
                 producer.cancel()
+            if watcher:
+                watcher.cancel()
             if self._writer is not None:
                 await self._writer.close()
+            if self._meta_writer is not None:
+                self._meta_writer.put(self.meta())
+                await self._meta_writer.close()
+
+    async def _watch_runner_state(self, engine: Engine) -> None:
+        """Mirror LiveSessionRunner's rotation state (T2.1) into Session.status so
+        subscribers see ROTATING/RECONNECTING without touching the frozen Engine ABC."""
+        last_state = None
+        while True:
+            runner = getattr(engine, "runner", None)
+            state = runner.stats.get("state") if runner and runner.stats else None
+            if state and state != last_state and self.status not in (
+                SessionStatus.STOPPED, SessionStatus.ERROR
+            ):
+                mapped = {
+                    "RUNNING": SessionStatus.RUNNING,
+                    "ROTATING": SessionStatus.ROTATING,
+                    "RECONNECTING": SessionStatus.RECONNECTING,
+                }.get(state)
+                if mapped is not None and mapped != self.status:
+                    self.status = mapped
+                    self._publish_status()
+                last_state = state
+            await asyncio.sleep(0.5)
 
     async def stop(self) -> None:
         if self.running:

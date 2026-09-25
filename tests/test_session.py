@@ -94,6 +94,34 @@ def test_engine_exception_marks_error_without_raising(settings):
     assert s.last_error == "RuntimeError: boom"
 
 
+def test_one_broken_room_never_affects_another(settings):
+    """T2.2: a crash in one room's engine.run() must not touch a sibling room."""
+    engines = {}
+
+    def factory():
+        # first room built fails immediately, the rest keep emitting
+        engine = FakeEngine(n=1, fail=True) if not engines else FakeEngine(n=1000, gap=0.02)
+        engines[len(engines)] = engine
+        return engine
+
+    async def main():
+        m = SessionManager(settings, engine_factory=factory)
+        broken = m.create("Rota", source_lang="en")
+        healthy = m.create("Sana", source_lang="en")
+        m.start(broken.id)
+        m.start(healthy.id)
+
+        await asyncio.wait_for(broken._task, timeout=2)
+        await asyncio.sleep(0.1)
+        assert healthy.status == SessionStatus.RUNNING and healthy.running
+        await m.stop(healthy.id)
+        return broken, healthy
+
+    broken, healthy = asyncio.run(main())
+    assert broken.status == SessionStatus.ERROR
+    assert healthy.status == SessionStatus.STOPPED
+
+
 def test_stop_cancels_a_running_session(settings):
     async def main():
         m = _manager(FakeEngine(n=1000, gap=0.05), settings)
@@ -140,6 +168,39 @@ def test_capacity_guard_rejects_a_third_live_room_at_start(settings):
         assert m.live_usage()["used"] == 0
 
     asyncio.run(main())
+
+
+def test_reload_brings_back_stopped_rooms_from_disk(settings):
+    """T2.3: meta.json + captions.jsonl survive a process restart."""
+    async def main():
+        m = _manager(FakeEngine(n=3, gap=0.0), settings)
+        s = m.create("Charla Grabada", source_lang="en", speaker="Ana")
+        m.start(s.id)
+        await asyncio.wait_for(s._task, timeout=2)
+        return s
+
+    original = asyncio.run(main())
+    assert original.status == SessionStatus.STOPPED
+
+    reloaded_manager = SessionManager(settings, engine_factory=lambda: FakeEngine())
+    reloaded_manager.reload()
+    reloaded = reloaded_manager.get(original.id)
+    assert reloaded is not None
+    assert reloaded.status == SessionStatus.STOPPED
+    assert reloaded.speaker == "Ana"
+    assert reloaded.public_info()["title"] == "Charla Grabada"
+    assert len(reloaded.history("en")) == 3
+    assert reloaded.history("en")[-1]["text"] == "en 3"
+
+    # a RUNNING room is never resumed after a restart
+    running_meta = original.meta_path.read_text()
+    import json as _json
+    meta = _json.loads(running_meta)
+    meta["status"] = "RUNNING"
+    original.meta_path.write_text(_json.dumps(meta))
+    yet_another_manager = SessionManager(settings, engine_factory=lambda: FakeEngine())
+    yet_another_manager.reload()
+    assert yet_another_manager.get(original.id) is None
 
 
 def test_slow_disk_never_delays_emit_nor_other_rooms(settings, monkeypatch):

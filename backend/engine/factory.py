@@ -10,7 +10,12 @@ def create_engine(settings: Settings) -> Engine:
     if name == "live_translate":
         from backend.engine.live_translate import LiveTranslateEngine
 
-        return LiveTranslateEngine(settings.gemini_api_key, settings.live_translate_model, settings.segment_idle_s)
+        return LiveTranslateEngine(
+            settings.gemini_api_key,
+            settings.live_translate_model,
+            settings.segment_idle_s,
+            rotate_after_s=settings.rotate_after_s,
+        )
     if name == "chunked":
         from backend.engine.chunked import ChunkedEngine
 
