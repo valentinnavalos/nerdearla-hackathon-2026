@@ -10,6 +10,8 @@ Estado: motor Camino 1 (`live_translate`) en producción, sesiones con pub/sub p
 
 ## Probalo en 3 minutos
 
+> Para que el jurado pueda testear sin configurar nada, dejamos un `ADMIN_TOKEN` de prueba en producción: `nerdearlaRocks`.
+
 1. Abrí `https://<TU-SERVICIO>.onrender.com/admin.html`, entrá con el `ADMIN_TOKEN` del proyecto.
 2. Creá una sala con fuente **Archivo (samples/)** apuntando a `samples/en_talk_3min.mp3`, arrancala.
 3. Abrí la vista de audiencia (`https://<TU-SERVICIO>.onrender.com/?s=ID`) o el QR que muestra `stage.html` — los subtítulos en vivo aparecen enseguida.
