@@ -4,6 +4,9 @@ WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+# Endorsement next to the logo ("para Nerdearla"); pass --build-arg VITE_PARTNER_NAME= to hide it
+ARG VITE_PARTNER_NAME=Nerdearla
+ENV VITE_PARTNER_NAME=$VITE_PARTNER_NAME
 RUN npm run build
 
 # ---- backend runtime stage ----

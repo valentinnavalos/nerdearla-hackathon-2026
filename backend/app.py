@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
     await app.state.manager.stop_all()
 
 
-app = FastAPI(title="Nerdearla Live Captions", lifespan=lifespan)
+app = FastAPI(title="Piluso Live Captions", lifespan=lifespan)
 app.include_router(sessions.router)
 app.include_router(ws.router)
 
