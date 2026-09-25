@@ -7,7 +7,9 @@ from typing import Callable
 from backend.config import DEFAULT_GLOSSARY_PATH, Settings
 from backend.core.capacity import CapacityError, CapacityGuard
 from backend.core.glossary import Glossary
-from backend.core.session import LANGS, Session, slugify
+from backend.core.metrics import DailyQuota
+from backend.core.persistence import load_all_meta
+from backend.core.session import LANGS, Session, SessionStatus, slugify
 from backend.engine.base import Engine
 from backend.engine.factory import create_engine
 
@@ -29,7 +31,12 @@ class SessionManager:
             default_glossary = Glossary.load(DEFAULT_GLOSSARY_PATH)
         self.default_glossary = default_glossary or Glossary()
         self._sessions: dict[str, Session] = {}
+<<<<<<< HEAD
         self.capacity = CapacityGuard(settings.max_concurrent_live)  # a room keeps its slot for its whole run
+=======
+        self._live_rooms: set[str] = set()  # rooms holding a Live slot, for their whole run
+        self._quota = DailyQuota(Path(settings.data_dir) / "quota.json")
+>>>>>>> 60f73db2aae8f2d80174bbd73bc638cacd4575c1
 
     def create(
         self,
@@ -57,10 +64,29 @@ class SessionManager:
             loop=loop,
             glossary=Glossary.merge(self.default_glossary, session_glossary),
             realtime=self.settings.realtime,
-            captions_path=Path(self.settings.data_dir) / "sessions" / session_id / "captions.jsonl",
+            captions_path=self._captions_path(session_id),
+            meta_path=self._meta_path(session_id),
         )
         self._sessions[session.id] = session
         return session
+
+    def _captions_path(self, session_id: str) -> Path:
+        return Path(self.settings.data_dir) / "sessions" / session_id / "captions.jsonl"
+
+    def _meta_path(self, session_id: str) -> Path:
+        return Path(self.settings.data_dir) / "sessions" / session_id / "meta.json"
+
+    def reload(self) -> None:
+        """Bring back rooms that finished in a previous process (T2.3): only STOPPED/ERROR
+        rooms are restored (a RUNNING room's Live session died with the old process)."""
+        for meta in load_all_meta(self.settings.data_dir):
+            session_id = meta.get("id")
+            if not session_id or session_id in self._sessions:
+                continue
+            if meta.get("status") not in (SessionStatus.STOPPED.value, SessionStatus.ERROR.value):
+                continue
+            session = Session.from_meta(meta, self._captions_path(session_id), self._meta_path(session_id))
+            self._sessions[session.id] = session
 
     def _unique_id(self, base: str) -> str:
         candidate, n = base, 2
@@ -97,8 +123,16 @@ class SessionManager:
                 self.capacity.release(session.id)
             raise
         if engine.uses_live:
+<<<<<<< HEAD
+=======
+            self._live_rooms.add(session.id)
+            self._quota.increment()
+>>>>>>> 60f73db2aae8f2d80174bbd73bc638cacd4575c1
             session.on_done(lambda: self._release_slot(session))
         return session
+
+    def quota_today(self) -> dict:
+        return {"used": self._quota.count_today(), "limit": self.settings.quota_live_sessions_per_day}
 
     def _release_slot(self, session: Session) -> None:
         if not session.running:  # a quick restart may already hold the slot again

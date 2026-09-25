@@ -16,9 +16,13 @@ import asyncio
 import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from backend.api.auth import check_ws_token
 from backend.core.session import LANGS
 
 router = APIRouter()
+
+INGEST_FRAME_BYTES = 3200  # 100 ms of PCM16 LE 16 kHz mono
+INGEST_STATUS_INTERVAL_S = 1.0
 
 
 @router.websocket("/ws/captions/{session_id}")
@@ -43,6 +47,55 @@ async def captions(ws: WebSocket, session_id: str, lang: str = "es") -> None:
         pass  # left while the history was being sent
     finally:
         session.unsubscribe(lang, queue)
+
+
+@router.websocket("/ws/ingest/{session_id}")
+async def ingest(ws: WebSocket, session_id: str, token: str | None = None) -> None:
+    """Mic audio from the stage view (T2.6/T2.7): binary frames of exactly
+    INGEST_FRAME_BYTES (100 ms PCM16 16kHz mono); wrong-size frames are dropped."""
+    settings = ws.app.state.settings
+    if not check_ws_token(settings, token):
+        await ws.close(code=4401, reason="unauthorized")
+        return
+    await ws.accept()
+    session = ws.app.state.manager.get(session_id)
+    if session is None or session.source != "mic" or session._mic_source is None:
+        await ws.close(code=4404, reason="session not found or not a mic room")
+        return
+
+    bad_size_frames = 0
+    status_task = asyncio.create_task(_ingest_status_loop(ws, session))
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
+            data = msg.get("bytes")
+            if data is None:
+                continue
+            if len(data) != INGEST_FRAME_BYTES:
+                bad_size_frames += 1
+                continue
+            session.push_audio(data)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        status_task.cancel()
+
+
+async def _ingest_status_loop(ws: WebSocket, session) -> None:
+    while True:
+        await asyncio.sleep(INGEST_STATUS_INTERVAL_S)
+        audio = session._ctx.metrics.snapshot() if session._ctx and session._ctx.metrics else {}
+        try:
+            await ws.send_json({
+                "type": "ingest_status",
+                "status": session.status.value,
+                "mic_connected": session.mic_connected(),
+                "lat_p50_ms": (audio.get("final_latency_ms") or {}).get("p50"),
+            })
+        except (WebSocketDisconnect, RuntimeError):
+            return
 
 
 async def _forward(ws: WebSocket, queue: asyncio.Queue) -> None:

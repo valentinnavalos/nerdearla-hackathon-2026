@@ -106,5 +106,56 @@ def test_runner_raises_when_the_server_closes_mid_stream(monkeypatch):
     async def emit(event):
         pass
 
+    # a single reconnect attempt with no backoff: fails fast instead of retrying for real time
+    engine = LiveTranslateEngine("key", "model", max_reconnect_failures=1, reconnect_backoffs=(0,))
     with pytest.raises(RuntimeError, match="1011"):
-        asyncio.run(LiveTranslateEngine("key", "model").run(_frames(1000), emit, SessionContext("s1", "en", "es")))
+        asyncio.run(engine.run(_frames(1000), emit, SessionContext("s1", "en", "es")))
+
+
+def test_run_forever_rotates_preemptively_and_resumes(monkeypatch):
+    """T2.1: rotate_after_s elapses -> reconnect with the resumption handle -> counters update."""
+    from backend.engine.live_runner import LiveSessionRunner
+
+    runner = LiveSessionRunner(api_key="key", model="model", config=types.LiveConnectConfig(),
+                                on_input_text=lambda *a: asyncio.sleep(0))
+    calls: list[str | None] = []
+
+    async def fake_run(frames, resumption_handle=None):
+        calls.append(resumption_handle)
+        runner.stats = {"resumption_handle": f"handle-{len(calls)}"}
+        if len(calls) == 1:
+            await asyncio.Event().wait()  # hangs until run_forever cancels it for rotation
+        # 2nd call: frames "end" -> return cleanly, run_forever should stop the loop
+
+    monkeypatch.setattr(runner, "run", fake_run)
+    states: list[str] = []
+
+    async def on_state(state):
+        states.append(state)
+
+    asyncio.run(runner.run_forever(_frames(1), rotate_after_s=0.03, on_state=on_state))
+
+    assert calls == [None, "handle-1"]  # 2nd connect resumed with the 1st connection's handle
+    assert runner._rotation_stats["rotations"] == 1
+    assert runner._rotation_stats["resumptions"] == 1
+    assert "ROTATING" in states
+
+
+def test_run_forever_raises_after_max_consecutive_failures(monkeypatch):
+    from backend.engine.live_runner import LiveSessionRunner
+
+    runner = LiveSessionRunner(api_key="key", model="model", config=types.LiveConnectConfig(),
+                                on_input_text=lambda *a: asyncio.sleep(0))
+
+    async def fake_run(frames, resumption_handle=None):
+        runner.stats = {"resumption_handle": None}
+        raise ConnectionError("network down")
+
+    monkeypatch.setattr(runner, "run", fake_run)
+    with pytest.raises(ConnectionError, match="network down"):
+        asyncio.run(runner.run_forever(
+            _frames(1), rotate_after_s=100, max_consecutive_failures=2, backoffs=(0,)
+        ))
+    assert runner._rotation_stats["reconnects"] == 1
+    assert runner._rotation_stats["fresh_sessions"] == 1
+    assert runner._rotation_stats["errors"] == 2
