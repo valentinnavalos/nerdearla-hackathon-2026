@@ -33,15 +33,15 @@
 | T1.12 | Página de audiencia v0 | B | 40 min | P0 | 1 | ✅ |
 | T1.13 | Dockerfile HF + primer deploy | B | 40 min | P0 | 1 | ⛔ |
 | T1.14 | Integración checkpoint H3.5 | AB | 15 min | P0 | 1 | ✅ |
-| T2.1 | Rotación + resiliencia del runner | A | 1.5 h | P0 | 2 | |
-| T2.2 | Aislamiento multi-sala | A | 25 min | P0 | 2 | |
-| T2.3 | Persistencia (`captions.jsonl`, `meta.json`) | A | 20 min | P0 | 2 | 🟡 |
-| T2.4 | Métricas: nivel, silencio, latencia, cuota | A | 50 min | P1 | 2 | |
-| T2.5 | API de administración + auth | A | 35 min | P0 | 2 | |
-| T2.6 | WS de ingesta de audio (backend del mic) | B | 25 min | P0 | 2 | |
-| T2.7 | Captura de mic con AudioWorklet | B | 1.3 h | P0 | 2 | |
-| T2.8 | Vista de escenario (captura + subtítulos + QR) | B | 50 min | P0 | 2 | |
-| T2.9 | Consola de operador | B | 50 min | P0 | 2 | |
+| T2.1 | Rotación + resiliencia del runner | A | 1.5 h | P0 | 2 | ✅ |
+| T2.2 | Aislamiento multi-sala | A | 25 min | P0 | 2 | ✅ |
+| T2.3 | Persistencia (`captions.jsonl`, `meta.json`) | A | 20 min | P0 | 2 | ✅ |
+| T2.4 | Métricas: nivel, silencio, latencia, cuota | A | 50 min | P1 | 2 | ✅ |
+| T2.5 | API de administración + auth | A | 35 min | P0 | 2 | ✅ |
+| T2.6 | WS de ingesta de audio (backend del mic) | B | 25 min | P0 | 2 | ✅ |
+| T2.7 | Captura de mic con AudioWorklet | B | 1.3 h | P0 | 2 | ✅ |
+| T2.8 | Vista de escenario (captura + subtítulos + QR) | B | 50 min | P0 | 2 | ✅ |
+| T2.9 | Consola de operador | B | 50 min | P0 | 2 | ✅ |
 | T2.10a | 2 sesiones Live aisladas (probe) | A | 15 min | P0 | 2 | ✅ |
 | T2.10b | 2 salas con el backend completo, 2–3 min | AB | 15 min | P0 | 2 | |
 | T2.10c | 2 salas × 20 min en el Space | AB | 30 min | P0 | 2 | |
@@ -518,6 +518,8 @@ license: mit
 
 #### T2.1 · Rotación + resiliencia del runner — A · 1.5 h · P0 · depende de T1.4, T2.10a
 
+**Estado:** ✅ Completo — `LiveSessionRunner.run_forever()` (rotación por `ROTATE_AFTER_S` o `GoAway`, lo que ocurra primero; reconexión con handle + backoff exponencial con jitter hasta 10 fallos seguidos → `ERROR`); `core/dedupe.py::dedupe_overlap()` con tests, aplicado en `live_translate.py` en el fallback de cada reconexión. `Session` refleja `ROTATING`/`RECONNECTING` vía un watcher liviano sobre `runner.stats["state"]`, sin tocar el `Engine` ABC congelado. Bug real encontrado y corregido en la prueba manual con mic: la Developer API (`GEMINI_API_KEY`) rechaza `transparent=True` en `SessionResumptionConfig` ("solo soportado en Gemini Enterprise Agent Platform") — se sacó; cada rotación es reconexión limpia + handle, no swap transparente (coincide con lo medido en T2.10a, donde `--transparent` era opt-in y estaba apagado por default). Validado en vivo: mic → traducción → escenario → audiencia funcionando end-to-end después del fix, con rotación/reconexión activa durante la corrida.
+
 **Funcional:** una charla de 40 min se subtitula sin cortes visibles aunque Gemini cierre la conexión cada ~10 min.
 
 **Contexto (T1.4 + docs de *session management*):** la **conexión** dura ~10 min (`GoAway` a los 9:00 con `time_left=50s`, corte a los 9:50 con `1008` si no se cierra). La **sesión** solo de audio dura 15 min sin compresión y se extiende con `context_window_compression`. El servidor manda `session_resumption_update` (~1/s, `resumable: true`, handle válido 2 h).
@@ -536,6 +538,8 @@ license: mit
 
 #### T2.2 · Aislamiento multi-sala — A · 25 min · P0 · depende de T2.1
 
+**Estado:** ✅ Completo — el aislamiento ya existía en `Session._run`/`SessionManager` (cada sala es su propia `asyncio.Task` con `try/except` propio); `tests/test_session.py::test_one_broken_room_never_affects_another` confirma que una sala rota pasa a `ERROR` sin afectar a una sana, y que `Glossary.merge` no muta el glosario default compartido.
+
 **Técnico:**
 - Cada `Session.run` envuelto en `try/except` propio; una excepción no controlada pasa esa sala a `ERROR` sin tocar las demás.
 - Prueba: 2 salas corriendo; a una se le pasa un archivo corrupto (o se la detiene de golpe) y la otra sigue emitiendo.
@@ -544,7 +548,7 @@ license: mit
 
 #### T2.3 · Persistencia — A · 20 min · P0
 
-**Estado:** 🟡 `captions.jsonl` hecho con escritor asíncrono (`core/persistence.py`: cola por sala + `asyncio.to_thread`; `tests/test_session.py` prueba que un disco lento no frena a ninguna sala). Falta `meta.json` y la recarga al reiniciar.
+**Estado:** ✅ Completo — `captions.jsonl` con escritor asíncrono (`core/persistence.py`: cola por sala + `asyncio.to_thread`; `tests/test_session.py` prueba que un disco lento no frena a ninguna sala). `MetaWriter` (mismo patrón, snapshot en vez de append) escribe `meta.json` al arrancar y al terminar la sala; `SessionManager.reload()` reconstruye las salas `STOPPED`/`ERROR` desde disco al iniciar el proceso (nunca una `RUNNING`, porque no se puede retomar una sesión Live de un proceso muerto), con test de reload cubriendo ambos casos.
 
 **Técnico:**
 - `DATA_DIR/sessions/<id>/captions.jsonl`: solo eventos **finales**, una línea por evento, append + flush.
@@ -555,6 +559,8 @@ license: mit
 **Listo cuando:** después de parar una sala, los archivos existen y se pueden leer.
 
 #### T2.4 · Métricas — A · 50 min · P1
+
+**Estado:** ✅ Completo — `core/metrics.py`: `VoiceActivityDetector` (hangover 300 ms), `SilenceAlert` (>20 s bajo −50 dBFS), `LatencyTracker` (p50/p95 sobre `deque(maxlen=200)`), `SessionMetrics` (agregador, colgado de `SessionContext.metrics`), `DailyQuota` (reinicio por día Pacífico, persistida en `quota.json`). El nivel de audio se mide envolviendo el iterable de frames en `live_translate.py` (`_MeteredFrames`, re-iterable entre rotaciones — un generador async simple no lo era y rompía la rotación). `Session.info()` expone `runner.stats` + el snapshot de métricas; `GET /api/sessions` suma `quota_today()`.
 
 **Funcional:** poder decir "la latencia es X" con números reales y detectar problemas antes que el público.
 
@@ -574,6 +580,8 @@ license: mit
 
 #### T2.5 · API de administración + auth — A · 35 min · P0
 
+**Estado:** ✅ Completo — `api/auth.py` (`require_admin` con `hmac.compare_digest`, más un helper compartido para WS); todas las rutas admin de la tabla implementadas en `api/sessions.py` (`POST/GET/DELETE /api/sessions`, `/start`, `/stop`, `/api/uploads` con tope de 100 MB); `app.py` registra handlers globales `SessionNotFound→404`, `CapacityError→409`, `ValueError→400`. `tests/test_admin_api.py` cubre 401 sin token, ciclo de vida completo, 404, 409 y 400. Verificado también con `curl`/consola real.
+
 **Funcional:** que solo el equipo del evento pueda crear salas y gastar cuota (el Space es público).
 
 **Técnico:**
@@ -590,6 +598,8 @@ license: mit
 
 #### T2.6 · WS de ingesta de audio — B · 25 min · P0 · depende de T1.9
 
+**Estado:** ✅ Completo — `sources/mic_source.py::MicSource` (reusa `FrameQueue` para el descarte del frame más viejo y el conteo de `dropped_frames`), alimentada por `push()` desde `/ws/ingest/{id}?token=` en vez de una tarea productora; `Session.start()` ya no bloquea `source="mic"`. El WS valida token (4401), sala/tipo (4404), descarta frames que no son de 3.200 bytes, y manda `ingest_status` cada 1 s. `tests/test_ws_ingest.py` cubre el flujo completo (frames → subtítulos), el descarte de tamaño incorrecto y los cierres 4401/4404. Verificado en vivo con mic real.
+
 **Técnico:**
 - `sources/mic_source.py`: `AudioSource` con una `asyncio.Queue(maxsize=50)` (5 s); `push(pcm)` desde el WS; si está llena, descarta el más viejo.
 - `/ws/ingest/{id}?token=`: recibe frames binarios de exactamente 3.200 bytes (100 ms de PCM16 LE 16 kHz mono); descarta y cuenta los de otro tamaño.
@@ -599,6 +609,8 @@ license: mit
 **Listo cuando:** un script que manda el mp3 por WS en frames de 100 ms produce subtítulos.
 
 #### T2.7 · Captura de mic con AudioWorklet — B · 1.3 h · P0 · depende de T2.6
+
+**Estado:** ✅ Completo — `js/pcm-worklet.js` (remuestreo a 16 kHz por interpolación lineal, frames de 1.600 muestras, mensajes de nivel periódicos) y `js/mic.js::MicCapture` (`getUserMedia` sin AGC/eco/ruido, selector de dispositivo, WS de ingesta con backoff + buffer de 3 s en desconexión, `wakeLock`). Verificado en Chrome con mic real (auricular WH-1000XM4 listado y capturando): nivel, transcripción y traducción en vivo funcionando en el escenario y en la audiencia.
 
 **Funcional:** capturar la entrada de la placa de audio desde el browser de la mini PC y mandarla al servidor.
 
@@ -616,6 +628,8 @@ license: mit
 
 #### T2.8 · Vista de escenario — B · 50 min · P0 · depende de T2.7, T1.12
 
+**Estado:** ✅ Completo — `stage.html`: medidor de nivel, estado de conexión, badge de latencia, `CaptionView` reusado, QR (qrcode.js) a la audiencia, botón de pantalla completa; controles de mic solo visibles si `source="mic"` (chequeado contra `GET /api/sessions` con token). Verificado en vivo: nivel moviéndose al hablar, latencia mostrada (~840 ms), QR apuntando a la URL correcta, subtítulos en vivo en pantalla completa.
+
 **Funcional:** la pantalla frente al público; captura el audio y muestra subtítulos + QR, igual que operan hoy.
 
 **Técnico (`stage.html?s=ID&token=...`):**
@@ -628,6 +642,8 @@ license: mit
 **Listo cuando:** en pantalla completa se ve profesional, el QR abre la audiencia correcta y la captura funciona.
 
 #### T2.9 · Consola de operador — B · 50 min · P0 · depende de T2.5
+
+**Estado:** ✅ Completo — `admin.html` + `js/admin.js`: login con token en `sessionStorage` (helper nuevo en `common.js`), formulario de sala nueva (mic / archivo de samples / subir mp3, loop, glosario), tabla de salas con Start/Stop/Borrar, links a escenario y audiencia, toasts de error. Verificado en vivo: creación de sala mic, arranque, apertura de escenario y captura funcionando de punta a punta.
 
 **Funcional:** el equipo de producción crea y controla salas sin tocar código.
 
