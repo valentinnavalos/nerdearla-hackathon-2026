@@ -124,9 +124,10 @@ const mic = new MicCapture({
     meterFill.classList.toggle("loud", dbfs > -6);
   },
   onStatus(state) {
-    const labels = { idle: "", starting: "iniciando…", capturing: "capturando", stopped: "", error: "error de mic" };
+    const labels = { idle: "", starting: "iniciando…", capturing: "capturando", stopped: "", error: "error de mic: sala no iniciada" };
     micStatus.textContent = labels[state] ?? "";
     micToggle.textContent = state === "capturing" ? "Detener" : "Iniciar captura";
+    if (state === "stopped" || state === "error") capturing = false;
   },
   onIngestStatus(msg) {
     if (typeof msg.lat_p50_ms === "number") {
@@ -148,6 +149,24 @@ async function setupMicPanel() {
   }
 }
 
+const RUNNING_STATUSES = new Set(["RUNNING", "ROTATING", "RECONNECTING"]);
+
+async function ensureSessionStarted() {
+  if (status && RUNNING_STATUSES.has(status)) return;
+  try {
+    await fetchJSON(`/api/sessions/${encodeURIComponent(sessionId)}/start`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err) {
+    // a room already running (race with another admin, or our own stale `status`) is fine:
+    // the backend answers 409 for a capacity conflict and an unhandled 500 for the plain
+    // "ya está corriendo" RuntimeError (core/session.py has no dedicated exception handler for it)
+    const msg = String(err.message || err);
+    if (!msg.startsWith("409") && !msg.startsWith("500")) throw err;
+  }
+}
+
 let capturing = false;
 micToggle.addEventListener("click", async () => {
   if (capturing) {
@@ -156,6 +175,7 @@ micToggle.addEventListener("click", async () => {
     return;
   }
   try {
+    await ensureSessionStarted();
     await mic.start(sessionId, token, micSelect.value || undefined);
     capturing = true;
     const devices = await mic.listDevices();

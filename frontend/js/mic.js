@@ -72,7 +72,7 @@ export class MicCapture {
     }
   }
 
-  stop() {
+  stop(finalStatus = "stopped") {
     this.stopped = true;
     clearTimeout(this.retryTimer);
     if (this.ws) {
@@ -98,7 +98,7 @@ export class MicCapture {
       this.wakeLock = null;
     }
     this.buffer.length = 0;
-    this.onStatus("stopped");
+    this.onStatus(finalStatus);
   }
 
   _onWorkletMessage(msg) {
@@ -135,9 +135,15 @@ export class MicCapture {
         /* ignore malformed status messages */
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       if (this.ws !== ws || this.stopped) return;
       this.ws = null;
+      if (e.code === 4404) {
+        // the room doesn't exist or was never started (session._mic_source is only created
+        // by POST /start): retrying forever would just loop silently, so surface it instead.
+        this.stop("error");
+        return;
+      }
       const delay = BACKOFF_S[Math.min(this.attempt, BACKOFF_S.length - 1)];
       this.attempt += 1;
       this.retryTimer = setTimeout(() => this._openWs(), delay * 1000);
