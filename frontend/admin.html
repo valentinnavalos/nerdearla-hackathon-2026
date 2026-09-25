@@ -1,7 +1,224 @@
 <!doctype html>
-<html>
-<head><meta charset="utf-8"><title>admin</title></head>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0d10">
+<title>Consola de operador</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
 <body>
-<!-- placeholder: ver T1.12 / T2.8 / T2.9 / T3.5 -->
+
+<main class="admin">
+  <h1>Consola de operador</h1>
+
+  <section id="login-section">
+    <div class="field">
+      <label for="token">Admin token</label>
+      <input type="text" id="token" autocomplete="off" placeholder="ADMIN_TOKEN">
+    </div>
+    <button type="button" id="login-btn" class="btn">Entrar</button>
+  </section>
+
+  <section id="console-section" hidden>
+    <h2>Nueva sala</h2>
+    <form id="create-form">
+      <div class="form-row">
+        <div class="field">
+          <label for="f-title">Título</label>
+          <input type="text" id="f-title" required>
+        </div>
+        <div class="field">
+          <label for="f-speaker">Orador/a</label>
+          <input type="text" id="f-speaker">
+        </div>
+        <div class="field">
+          <label for="f-lang">Idioma de la charla</label>
+          <select id="f-lang">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="f-source">Fuente</label>
+          <select id="f-source">
+            <option value="mic">Micrófono</option>
+            <option value="file">Archivo (samples/)</option>
+            <option value="upload">Subir mp3</option>
+          </select>
+        </div>
+        <div class="field" id="f-file-field" hidden>
+          <label for="f-file">Archivo (ruta en samples/)</label>
+          <input type="text" id="f-file" placeholder="samples/en_talk_3min.mp3">
+        </div>
+        <div class="field" id="f-upload-field" hidden>
+          <label for="f-upload">Subir mp3</label>
+          <input type="file" id="f-upload" accept="audio/*">
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="f-loop">
+        <label for="f-loop">Repetir en loop</label>
+      </div>
+      <div class="field">
+        <label for="f-glossary">Glosario (un término por línea, "mal =&gt; bien" para reemplazos)</label>
+        <textarea id="f-glossary" placeholder="Kubernetes&#10;cubernetes =&gt; Kubernetes"></textarea>
+      </div>
+      <button type="submit" class="btn">Crear sala</button>
+    </form>
+
+    <h2>Salas</h2>
+    <button type="button" id="refresh-btn" class="btn">Actualizar</button>
+    <table class="rooms-table">
+      <thead>
+        <tr><th>Título</th><th>Estado</th><th>Fuente</th><th>Oyentes</th><th>Acciones</th></tr>
+      </thead>
+      <tbody id="rooms-body"></tbody>
+    </table>
+  </section>
+
+  <div id="toast-stack" class="toast-stack"></div>
+</main>
+
+<script type="module">
+import { STATUS_LABELS, el } from "./js/common.js";
+import * as admin from "./js/admin.js";
+
+const loginSection = document.getElementById("login-section");
+const consoleSection = document.getElementById("console-section");
+const toastStack = document.getElementById("toast-stack");
+
+function toast(message) {
+  const t = el("div", { class: "toast" }, message);
+  toastStack.appendChild(t);
+  setTimeout(() => t.remove(), 6000);
+}
+
+async function tryEnter(token) {
+  admin.setToken(token);
+  try {
+    await refreshRooms();
+    loginSection.hidden = true;
+    consoleSection.hidden = false;
+  } catch (err) {
+    toast(`No se pudo entrar: ${err.message}`);
+  }
+}
+
+document.getElementById("login-btn").addEventListener("click", () => {
+  const token = document.getElementById("token").value.trim();
+  if (token) tryEnter(token);
+});
+
+// --- create form ---------------------------------------------------------------
+
+const sourceSelect = document.getElementById("f-source");
+const fileField = document.getElementById("f-file-field");
+const uploadField = document.getElementById("f-upload-field");
+function syncSourceFields() {
+  fileField.hidden = sourceSelect.value !== "file";
+  uploadField.hidden = sourceSelect.value !== "upload";
+}
+sourceSelect.addEventListener("change", syncSourceFields);
+syncSourceFields();
+
+document.getElementById("create-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const sourceKind = sourceSelect.value;
+  try {
+    let file = null;
+    let source = "file";
+    if (sourceKind === "mic") {
+      source = "mic";
+    } else if (sourceKind === "file") {
+      file = document.getElementById("f-file").value.trim();
+    } else {
+      const input = document.getElementById("f-upload");
+      if (!input.files[0]) throw new Error("elegí un archivo");
+      const { file: uploaded } = await admin.uploadFile(input.files[0]);
+      file = uploaded;
+    }
+    await admin.createSession({
+      title: document.getElementById("f-title").value.trim(),
+      speaker: document.getElementById("f-speaker").value.trim(),
+      source_lang: document.getElementById("f-lang").value,
+      source,
+      file: file || null,
+      loop: document.getElementById("f-loop").checked,
+      glossary_text: document.getElementById("f-glossary").value || null,
+    });
+    e.target.reset();
+    syncSourceFields();
+    await refreshRooms();
+  } catch (err) {
+    toast(`No se pudo crear la sala: ${err.message}`);
+  }
+});
+
+// --- rooms table -----------------------------------------------------------------
+
+document.getElementById("refresh-btn").addEventListener("click", () => refreshRooms().catch((e) => toast(e.message)));
+
+async function refreshRooms() {
+  const data = await admin.listSessions();
+  const tbody = document.getElementById("rooms-body");
+  tbody.replaceChildren(...data.sessions.map(roomRow));
+}
+
+function roomRow(room) {
+  const token = admin.getToken();
+  const listeners = Object.values(room.metrics?.listeners ?? {}).reduce((a, b) => a + b, 0);
+  const actions = el(
+    "div",
+    { class: "row-actions" },
+    room.status === "CREATED" || room.status === "STOPPED" || room.status === "ERROR"
+      ? el("button", { type: "button", class: "btn", dataset: { action: "start", id: room.id } }, "Start")
+      : el("button", { type: "button", class: "btn", dataset: { action: "stop", id: room.id } }, "Stop"),
+    el("button", { type: "button", class: "btn", dataset: { action: "delete", id: room.id } }, "Borrar"),
+    el("a", { class: "btn", href: `stage.html?s=${encodeURIComponent(room.id)}&token=${encodeURIComponent(token)}`, target: "_blank" }, "Escenario"),
+    el("a", { class: "btn", href: `/?s=${encodeURIComponent(room.id)}`, target: "_blank" }, "Audiencia"),
+  );
+  const row = el(
+    "tr",
+    {},
+    el("td", {}, room.title),
+    el("td", {}, el("span", { class: `badge status-${room.status.toLowerCase()}` }, STATUS_LABELS[room.status] ?? room.status)),
+    el("td", {}, room.source),
+    el("td", {}, String(listeners)),
+    el("td", {}, actions),
+  );
+  return row;
+}
+
+document.getElementById("rooms-body").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-action]");
+  if (!btn) return;
+  const { action, id } = btn.dataset;
+  try {
+    if (action === "start") await admin.startSession(id);
+    else if (action === "stop") await admin.stopSession(id);
+    else if (action === "delete") {
+      if (!confirm("¿Borrar esta sala?")) return;
+      await admin.deleteSession(id);
+    }
+    await refreshRooms();
+  } catch (err) {
+    toast(`No se pudo ${action}: ${err.message}`);
+  }
+});
+
+// --- boot ------------------------------------------------------------------------
+
+const saved = admin.getToken();
+if (saved) {
+  document.getElementById("token").value = saved;
+  tryEnter(saved);
+}
+setInterval(() => {
+  if (!consoleSection.hidden) refreshRooms().catch(() => {});
+}, 4000);
+</script>
 </body>
 </html>

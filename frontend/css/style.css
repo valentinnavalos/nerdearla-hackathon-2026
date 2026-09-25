@@ -163,3 +163,59 @@ body.contrast .captions { font-weight: 700; }
 @media (min-width: 768px) {
   .line { max-width: 40ch; }
 }
+
+/* --- stage view (T2.8) --- */
+
+.stage { display: flex; flex-direction: column; height: 100vh; height: 100dvh; position: relative; }
+.stage .captions { justify-content: center; text-align: center; align-items: center; }
+.stage .line { max-width: 90vw; }
+
+.meter { width: 60px; height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.meter-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.1s linear; }
+.meter-fill.loud { background: var(--warn); }
+
+.stage-qr {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  background: #fff;
+  padding: 8px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.stage-qr canvas { display: block; }
+.stage-qr span { color: #111; font-size: 0.7rem; max-width: 140px; text-align: center; overflow-wrap: anywhere; }
+
+.mic-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mic-panel select { font: inherit; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; min-height: 44px; padding: 0 10px; }
+
+/* --- admin console (T2.9) --- */
+
+.admin { max-width: 900px; margin: 0 auto; padding: 24px 16px 64px; }
+.admin h1 { font-size: 1.5rem; }
+.admin section { margin-bottom: 28px; }
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field label { color: var(--muted); font-size: 0.85rem; }
+.field input[type="text"], .field select, .field textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.field textarea { min-height: 80px; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.form-row .field { flex: 1 1 160px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; }
+
+table.rooms-table { width: 100%; border-collapse: collapse; }
+table.rooms-table th, table.rooms-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.rooms-table .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+table.rooms-table .row-actions .btn { min-height: 36px; padding: 0 10px; font-size: 0.85rem; }
+
+.toast-stack { position: fixed; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+.toast { background: var(--danger); color: #fff; padding: 10px 14px; border-radius: 10px; max-width: 320px; }

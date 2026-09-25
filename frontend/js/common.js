@@ -45,6 +45,26 @@ export const storage = {
   },
 };
 
+// Same shape as `storage`, but sessionStorage (the admin token must not survive
+// the browser tab closing).
+export const sessionStore = {
+  get(key, fallback) {
+    try {
+      const value = sessionStorage.getItem(key);
+      return value === null ? fallback : JSON.parse(value);
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
