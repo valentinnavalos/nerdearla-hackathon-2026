@@ -17,6 +17,7 @@ from backend.core.persistence import CaptionWriter, MetaWriter, load_captions
 from backend.engine.base import Engine, SessionContext
 from backend.sources.base import FrameQueue, pump
 from backend.sources.file_source import FileSource
+from backend.sources.mic_source import MicSource
 
 LANGS = ("en", "es")
 HISTORY_SIZE = 50  # finals kept per language for late joiners
@@ -82,6 +83,7 @@ class Session:
         self.last_error: str | None = None
         self.events = 0
         self._frames: FrameQueue | None = None
+        self._mic_source: MicSource | None = None
         self._history: dict[str, deque[dict]] = {lang: deque(maxlen=HISTORY_SIZE) for lang in LANGS}
         self._subscribers: dict[str, set[asyncio.Queue]] = {lang: set() for lang in LANGS}
         self._task: asyncio.Task | None = None
@@ -148,7 +150,17 @@ class Session:
 
     @property
     def dropped_frames(self) -> int:
+        if self._mic_source is not None:
+            return self._mic_source.dropped_frames
         return self._frames.dropped_frames if self._frames else 0
+
+    def push_audio(self, pcm: bytes) -> None:
+        """Feed one 100ms PCM16 16kHz mono frame from the ingest WS (T2.6)."""
+        if self._mic_source is not None:
+            self._mic_source.push(pcm)
+
+    def mic_connected(self, timeout_s: float = 3.0) -> bool:
+        return self._mic_source is not None and self._mic_source.is_connected(timeout_s)
 
     def listeners(self) -> dict[str, int]:
         return {lang: len(subs) for lang, subs in self._subscribers.items()}
@@ -195,8 +207,8 @@ class Session:
             raise RuntimeError(f"la sala {self.id} ya está corriendo")
         if engine.needs_audio:
             if self.source == "mic":
-                raise ValueError("la fuente mic llega con la ingesta por WS (T2.6)")
-            if not self.file:
+                self._mic_source = MicSource()
+            elif not self.file:
                 raise ValueError("la fuente file necesita un archivo")
         self.status = SessionStatus.RUNNING
         self.started_at = time.time()
@@ -226,10 +238,13 @@ class Session:
         try:
             frames = _no_frames()
             if engine.needs_audio:
-                self._frames = FrameQueue(maxsize=FRAME_QUEUE_SIZE)
-                source = FileSource(self.file, realtime=self.realtime, loop=self.loop)
-                producer = asyncio.create_task(pump(source, self._frames))
-                frames = self._frames
+                if self.source == "mic":
+                    frames = self._mic_source
+                else:
+                    self._frames = FrameQueue(maxsize=FRAME_QUEUE_SIZE)
+                    source = FileSource(self.file, realtime=self.realtime, loop=self.loop)
+                    producer = asyncio.create_task(pump(source, self._frames))
+                    frames = self._frames
             source_desc = (self.file or self.source) if engine.needs_audio else "-"
             self.log.info("started: engine=%s source=%s", type(engine).__name__, source_desc)
             if getattr(engine, "uses_live", False):
@@ -250,6 +265,8 @@ class Session:
                 producer.cancel()
             if watcher:
                 watcher.cancel()
+            if self._mic_source is not None:
+                self._mic_source.close()
             if self._writer is not None:
                 await self._writer.close()
             if self._meta_writer is not None:
