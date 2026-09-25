@@ -1,6 +1,7 @@
 """SessionManager: registry of rooms + pub/sub entry point for the API/WS layer."""
 
 import asyncio
+import shutil
 from pathlib import Path
 from typing import Callable
 
@@ -145,6 +146,7 @@ class SessionManager:
     async def delete(self, session_id: str) -> None:
         await self.stop(session_id)
         del self._sessions[session_id]
+        shutil.rmtree(self._meta_path(session_id).parent, ignore_errors=True)
 
     async def stop_all(self) -> None:
         await asyncio.gather(*(s.stop() for s in self._sessions.values()), return_exceptions=True)

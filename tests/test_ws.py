@@ -33,7 +33,12 @@ def client(monkeypatch, replay_file, tmp_path):
     get_settings.cache_clear()
     from backend.app import app
 
+    async def seed():
+        session = app.state.manager.create("Demo", speaker="Replay de ejemplo", source_lang="en")
+        app.state.manager.start(session.id)
+
     with TestClient(app) as c:
+        c.portal.call(seed)
         yield c
     get_settings.cache_clear()
 

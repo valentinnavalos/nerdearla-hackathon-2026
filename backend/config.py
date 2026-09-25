@@ -36,11 +36,7 @@ class Settings(BaseSettings):
     overlap_seconds: float = 0.75
     realtime: bool = True
 
-    # replay + demo room seeded at startup (until the operator console, T2.9)
     replay_file: str = "samples/replay_demo.jsonl"
-    demo_file: str = ""
-    demo_lang: Lang = "en"
-    demo_loop: bool = False
 
 
 @lru_cache

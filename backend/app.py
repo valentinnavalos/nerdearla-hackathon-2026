@@ -32,49 +32,6 @@ class SPAStaticFiles(StaticFiles):
             return await super().get_response("index.html", scope)
 
 
-PITCH_ROOMS = [
-    {
-        "title": "Interview with Rob Pike",
-        "speaker": "Rob Pike",
-        "source_lang": "en",
-        "file": "samples/en_talk_3min.mp3",
-        "loop": True,
-    },
-    {
-        "title": "Brownfield Engineering",
-        "speaker": "Nicolás Páez",
-        "source_lang": "es",
-        "file": "samples/es_talk_2min.mp3",
-        "loop": True,
-    },
-    {
-        "title": "Human-Centric Engineering",
-        "speaker": "Ben Popplestone",
-        "source_lang": "en",
-        "file": "samples/human-centric-eng-by-ben-popplestone.mp3",
-        "loop": True,
-    },
-]
-
-
-def seed_demo(manager: SessionManager, settings: Settings) -> None:
-    """Pitch-ready rooms created at startup, until the operator console exists (T2.9).
-    ENGINE=replay gets a single replay room (no API usage); other engines get the 3 PITCH_ROOMS."""
-    if settings.engine == "replay":
-        session = manager.create("Demo", speaker="Replay de ejemplo", source_lang="en")
-        manager.start(session.id)
-        return
-    for room in PITCH_ROOMS:
-        session = manager.create(
-            room["title"],
-            speaker=room["speaker"],
-            source_lang=room["source_lang"],
-            file=room["file"],
-            loop=room["loop"],
-        )
-        manager.start(session.id)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -85,10 +42,6 @@ async def lifespan(app: FastAPI):
         app.state.manager.reload()
     except Exception as e:  # a bad meta.json must never stop the app from starting
         log.warning("session reload failed: %s: %s", type(e).__name__, e)
-    try:
-        seed_demo(app.state.manager, settings)
-    except Exception as e:  # the room is already in ERROR with the reason; keep serving
-        log.warning("demo room could not start: %s: %s", type(e).__name__, e)
     log.info("ready: engine=%s", settings.engine)
     yield
     await app.state.manager.stop_all()
