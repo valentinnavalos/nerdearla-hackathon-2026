@@ -55,9 +55,9 @@ def test_create_start_stop_delete_lifecycle(client):
     r = client.delete(f"/api/sessions/{session_id}", headers=auth())
     assert r.status_code == 200 and r.json() == {"ok": True}
 
-    assert client.get("/api/sessions", headers=auth()).json()["sessions"] == \
-        [s for s in client.get("/api/sessions", headers=auth()).json()["sessions"]]  # still 200, room gone
-    assert not any(s["id"] == session_id for s in client.get("/api/sessions", headers=auth()).json()["sessions"])
+    r = client.get("/api/sessions", headers=auth())
+    assert r.status_code == 200  # still 200, room gone
+    assert not any(s["id"] == session_id for s in r.json()["sessions"])
 
 
 def test_start_missing_session_is_404(client):

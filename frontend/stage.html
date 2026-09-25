@@ -18,6 +18,7 @@
       <span id="conn" class="conn"></span>
     </div>
     <div class="controls">
+      <span id="direction-badge" hidden></span>
       <span id="lat-badge" class="badge" hidden></span>
       <div class="lang-toggle" role="group" aria-label="Idioma">
         <button type="button" data-lang="es">ES</button>
@@ -45,7 +46,7 @@
 <script type="module">
 import { CaptionView } from "./js/captions.js";
 import { MicCapture } from "./js/mic.js";
-import { STATUS_LABELS, el, fetchJSON, qs } from "./js/common.js";
+import { STATUS_LABELS, el, fetchJSON, qs, renderDirectionBadge } from "./js/common.js";
 
 const sessionId = qs("s");
 const token = qs("token") || "";
@@ -194,6 +195,9 @@ fetchJSON("/api/public/sessions")
     if (room) {
       title.textContent = room.title;
       document.title = `${room.title} · Escenario`;
+      const directionBadge = document.getElementById("direction-badge");
+      directionBadge.replaceChildren(renderDirectionBadge(room.source_lang, room.target_lang));
+      directionBadge.hidden = false;
     }
   })
   .catch(() => {});

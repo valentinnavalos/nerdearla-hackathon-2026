@@ -77,6 +77,18 @@
       </thead>
       <tbody id="rooms-body"></tbody>
     </table>
+
+    <h2>Panel de monitoreo</h2>
+    <p id="monitor-global" class="monitor-global"></p>
+    <table class="rooms-table monitor-table">
+      <thead>
+        <tr>
+          <th>Sala</th><th>Estado</th><th>Uptime</th><th>Mic</th><th>Silencio</th>
+          <th>Latencia p50/p95 (final)</th><th>Rot./Recon./Err.</th><th>Último error</th><th>Oyentes</th>
+        </tr>
+      </thead>
+      <tbody id="monitor-body"></tbody>
+    </table>
   </section>
 
   <div id="toast-stack" class="toast-stack"></div>
@@ -102,6 +114,8 @@ async function tryEnter(token) {
     await refreshRooms();
     loginSection.hidden = true;
     consoleSection.hidden = false;
+    if (closeAdminSocket) closeAdminSocket();
+    closeAdminSocket = admin.openAdminSocket(renderMonitor);
   } catch (err) {
     toast(`No se pudo entrar: ${err.message}`);
   }
@@ -208,6 +222,65 @@ document.getElementById("rooms-body").addEventListener("click", async (e) => {
     toast(`No se pudo ${action}: ${err.message}`);
   }
 });
+
+// --- monitoring panel (T3.2) -------------------------------------------------------
+
+function fmtUptime(s) {
+  if (s == null) return "-";
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function fmtLatency(bucket) {
+  if (!bucket || (bucket.p50 == null && bucket.p95 == null)) return "-";
+  const p50 = bucket.p50 != null ? Math.round(bucket.p50) : "-";
+  const p95 = bucket.p95 != null ? Math.round(bucket.p95) : "-";
+  return `${p50} / ${p95} ms`;
+}
+
+function monitorRow(room) {
+  const audio = room.metrics?.audio;
+  const runner = room.metrics?.runner ?? {};
+  const listeners = Object.entries(room.metrics?.listeners ?? {}).map(([l, n]) => `${l}:${n}`).join(" ");
+  const micAlert = room.source === "mic" && room.mic_connected === false;
+  const silenceAlert = !!audio?.silence_alert;
+  const errorAlert = room.status === "ERROR";
+
+  const micCell = room.source === "mic"
+    ? `${room.mic_connected ? "conectado" : "desconectado"}${audio?.last_frame_age_s != null ? ` (${audio.last_frame_age_s}s)` : ""}`
+    : "-";
+
+  const row = el(
+    "tr",
+    {},
+    el("td", {}, room.title),
+    el("td", {}, el("span", { class: `badge status-${room.status.toLowerCase()}` }, STATUS_LABELS[room.status] ?? room.status)),
+    el("td", {}, fmtUptime(room.uptime_s)),
+    el("td", { class: micAlert ? "alert" : "" }, micCell),
+    el("td", { class: silenceAlert ? "alert" : "" }, silenceAlert ? "⚠ silencio" : "-"),
+    el("td", {}, fmtLatency(audio?.final_latency_ms)),
+    el("td", {}, `${runner.rotations ?? 0} / ${runner.reconnects ?? 0} / ${runner.errors ?? 0}`),
+    el("td", { class: errorAlert ? "alert" : "" }, room.last_error ?? "-"),
+    el("td", {}, listeners || "-"),
+  );
+  if (errorAlert) row.classList.add("alert-row");
+  return row;
+}
+
+function renderMonitor(snapshot) {
+  const tbody = document.getElementById("monitor-body");
+  tbody.replaceChildren(...snapshot.sessions.map(monitorRow));
+
+  const { used: liveUsed, max: liveMax } = snapshot.live_usage;
+  const { used: quotaUsed, limit: quotaLimit } = snapshot.quota;
+  const quotaPct = quotaLimit > 0 ? quotaUsed / quotaLimit : 0;
+  const global = document.getElementById("monitor-global");
+  global.textContent =
+    `Live: ${liveUsed}/${liveMax} · Cuota hoy: ${quotaUsed}${quotaLimit > 0 ? `/${quotaLimit}` : ""} · Costo: USD 0`;
+  global.classList.toggle("alert", quotaLimit > 0 && quotaPct > 0.8);
+}
+
+let closeAdminSocket = null;
 
 // --- boot ------------------------------------------------------------------------
 

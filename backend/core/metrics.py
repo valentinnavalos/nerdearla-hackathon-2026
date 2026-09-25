@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import sys
+import time
 from array import array
 from collections import deque
 from datetime import datetime
@@ -119,7 +120,8 @@ class SessionMetrics:
         self.first_partial_latency = LatencyTracker()
         self.final_latency = LatencyTracker()
         self.level_dbfs = SILENCE_DBFS
-        self.last_frame_at: float | None = None
+        self.last_frame_at: float | None = None  # session-relative t (for latency math)
+        self._last_frame_wall: float | None = None  # absolute monotonic (for "age", T3.2)
         self._voice_start_t: float | None = None
         self._voice_end_t: float | None = None
         self._partial_since_voice = False
@@ -127,6 +129,7 @@ class SessionMetrics:
     def on_frame(self, pcm: bytes, t: float) -> None:
         self.level_dbfs = rms_dbfs(pcm)
         self.last_frame_at = t
+        self._last_frame_wall = time.monotonic()
         self.silence.process(self.level_dbfs, t)
         event = self.vad.process(self.level_dbfs, t)
         if event and event["event"] == "start":
@@ -149,6 +152,9 @@ class SessionMetrics:
             "level_dbfs": round(self.level_dbfs, 1),
             "silence_alert": self.silence.active,
             "voice_active": self.vad.in_voice,
+            "last_frame_age_s": (
+                round(time.monotonic() - self._last_frame_wall, 1) if self._last_frame_wall is not None else None
+            ),
             "first_partial_latency_ms": {"p50": self.first_partial_latency.p50(),
                                           "p95": self.first_partial_latency.p95()},
             "final_latency_ms": {"p50": self.final_latency.p50(), "p95": self.final_latency.p95()},

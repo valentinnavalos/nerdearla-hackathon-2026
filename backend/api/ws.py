@@ -23,6 +23,7 @@ router = APIRouter()
 
 INGEST_FRAME_BYTES = 3200  # 100 ms of PCM16 LE 16 kHz mono
 INGEST_STATUS_INTERVAL_S = 1.0
+ADMIN_SNAPSHOT_INTERVAL_S = 1.0
 
 
 @router.websocket("/ws/captions/{session_id}")
@@ -81,6 +82,31 @@ async def ingest(ws: WebSocket, session_id: str, token: str | None = None) -> No
         pass
     finally:
         status_task.cancel()
+
+
+@router.websocket("/ws/admin")
+async def admin_snapshot(ws: WebSocket, token: str | None = None) -> None:
+    """Full state snapshot every 1 s, for the monitoring panel (T3.2)."""
+    settings = ws.app.state.settings
+    if not check_ws_token(settings, token):
+        await ws.close(code=4401, reason="unauthorized")
+        return
+    await ws.accept()
+    manager = ws.app.state.manager
+    try:
+        while True:
+            try:
+                await ws.send_json({
+                    "type": "admin_snapshot",
+                    "sessions": [s.info() for s in manager.list()],
+                    "live_usage": manager.live_usage(),
+                    "quota": manager.quota_today(),
+                })
+            except (WebSocketDisconnect, RuntimeError):
+                return
+            await asyncio.sleep(ADMIN_SNAPSHOT_INTERVAL_S)
+    except WebSocketDisconnect:
+        pass
 
 
 async def _ingest_status_loop(ws: WebSocket, session) -> None:

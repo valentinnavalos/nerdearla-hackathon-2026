@@ -21,13 +21,23 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from backend.api.auth import require_admin
+from backend.core.persistence import load_captions
+from backend.post import exports
 
 router = APIRouter()
 
 UPLOAD_MAX_BYTES = 100 * 1024 * 1024
+
+EXPORT_MEDIA_TYPES = {
+    "srt": "application/x-subrip",
+    "vtt": "text/vtt",
+    "txt": "text/plain",
+    "md": "text/markdown",
+}
 
 
 class CreateSessionBody(BaseModel):
@@ -94,6 +104,32 @@ def list_sessions(request: Request) -> dict:
         "live_usage": manager.live_usage(),
         "quota": manager.quota_today(),
     }
+
+
+@router.get("/api/sessions/{session_id}/export.{fmt}")
+def export_session(session_id: str, fmt: str, request: Request, lang: str = "es") -> PlainTextResponse:
+    if fmt not in EXPORT_MEDIA_TYPES:
+        raise HTTPException(400, f"formato inválido: {fmt}")
+    session = request.app.state.manager.get(session_id)
+    if session is None:
+        raise HTTPException(404, "sala no encontrada")
+    events = load_captions(session.captions_path) if session.captions_path else []
+    if fmt == "md":
+        events_by_lang: dict[str, list[dict]] = {}
+        for e in events:
+            events_by_lang.setdefault(e["lang"], []).append(e)
+        body = exports.to_md(session.meta(), events_by_lang)
+    else:
+        if lang not in ("en", "es"):
+            raise HTTPException(400, "lang debe ser 'en' o 'es'")
+        lang_events = [e for e in events if e.get("lang") == lang]
+        if fmt == "txt":
+            body = exports.to_txt(lang_events)
+        else:
+            offset_ms = exports.median_latency_ms(lang_events)
+            cues = exports.build_cues(lang_events, offset_ms=offset_ms)
+            body = exports.to_srt(cues) if fmt == "srt" else exports.to_vtt(cues)
+    return PlainTextResponse(body, media_type=EXPORT_MEDIA_TYPES[fmt])
 
 
 @router.post("/api/uploads", dependencies=[Depends(require_admin)])

@@ -27,6 +27,7 @@
       <span id="conn" class="conn"></span>
     </div>
     <div class="controls">
+      <span id="direction-badge" hidden></span>
       <div class="lang-toggle" role="group" aria-label="Idioma">
         <button type="button" data-lang="es">ES</button>
         <button type="button" data-lang="en">EN</button>
@@ -42,7 +43,7 @@
 
 <script type="module">
 import { CaptionView } from "./js/captions.js";
-import { LANG_LABELS, STATUS_LABELS, el, fetchJSON, qs, storage } from "./js/common.js";
+import { LANG_LABELS, STATUS_LABELS, el, fetchJSON, qs, storage, renderDirectionBadge } from "./js/common.js";
 
 const FONT_STEPS = [1.4, 1.75, 2.2, 2.75, 3.4]; // rem
 const sessionId = qs("s");
@@ -101,6 +102,14 @@ function showCaptions(id) {
   let status = null;
   let connection = "connecting";
 
+  // Overlay mode for OBS/vMix (T3.1): ?overlay=1&bg=transparent|green&size=L&lines=2
+  const overlay = qs("overlay") === "1";
+  if (overlay) {
+    const bg = qs("bg") === "green" ? "green" : "transparent";
+    document.body.classList.add("overlay", `bg-${bg}`);
+  }
+  const overlayLines = overlay ? Number(qs("lines")) || 3 : 3;
+
   function paintConn(retryInS) {
     const labels = {
       connecting: "conectando…",
@@ -118,7 +127,7 @@ function showCaptions(id) {
   }
 
   const view = new CaptionView(document.getElementById("captions"), {
-    lines: 3,
+    lines: overlayLines,
     onStatus(s) {
       status = s;
       paintConn();
@@ -144,20 +153,26 @@ function showCaptions(id) {
   }
   for (const b of langButtons) b.addEventListener("click", () => b.dataset.lang !== lang && setLang(b.dataset.lang));
 
-  // font size + high contrast (per-viewer, remembered)
-  let fontStep = storage.get("captions.fontStep", 2);
-  let contrast = storage.get("captions.contrast", false);
-  function applyPrefs() {
-    document.documentElement.style.setProperty("--caption-size", `${FONT_STEPS[fontStep]}rem`);
-    document.body.classList.toggle("contrast", contrast);
-    document.getElementById("contrast").setAttribute("aria-pressed", String(contrast));
-    storage.set("captions.fontStep", fontStep);
-    storage.set("captions.contrast", contrast);
+  // font size + high contrast (per-viewer, remembered) — overlay mode uses its own
+  // fixed size from ?size= instead, and never persists it (OBS reopens the page fresh).
+  if (overlay) {
+    const step = qs("size") === "L" ? FONT_STEPS.length - 1 : 2;
+    document.documentElement.style.setProperty("--caption-size", `${FONT_STEPS[step]}rem`);
+  } else {
+    let fontStep = storage.get("captions.fontStep", 2);
+    let contrast = storage.get("captions.contrast", false);
+    function applyPrefs() {
+      document.documentElement.style.setProperty("--caption-size", `${FONT_STEPS[fontStep]}rem`);
+      document.body.classList.toggle("contrast", contrast);
+      document.getElementById("contrast").setAttribute("aria-pressed", String(contrast));
+      storage.set("captions.fontStep", fontStep);
+      storage.set("captions.contrast", contrast);
+    }
+    document.getElementById("smaller").addEventListener("click", () => { fontStep = Math.max(0, fontStep - 1); applyPrefs(); });
+    document.getElementById("bigger").addEventListener("click", () => { fontStep = Math.min(FONT_STEPS.length - 1, fontStep + 1); applyPrefs(); });
+    document.getElementById("contrast").addEventListener("click", () => { contrast = !contrast; applyPrefs(); });
+    applyPrefs();
   }
-  document.getElementById("smaller").addEventListener("click", () => { fontStep = Math.max(0, fontStep - 1); applyPrefs(); });
-  document.getElementById("bigger").addEventListener("click", () => { fontStep = Math.min(FONT_STEPS.length - 1, fontStep + 1); applyPrefs(); });
-  document.getElementById("contrast").addEventListener("click", () => { contrast = !contrast; applyPrefs(); });
-  applyPrefs();
 
   title.textContent = id;
   fetchJSON("/api/public/sessions")
@@ -166,6 +181,9 @@ function showCaptions(id) {
       if (room) {
         title.textContent = room.title;
         document.title = `${room.title} · Subtítulos`;
+        const directionBadge = document.getElementById("direction-badge");
+        directionBadge.replaceChildren(renderDirectionBadge(room.source_lang, room.target_lang));
+        directionBadge.hidden = false;
       }
     })
     .catch(() => {});

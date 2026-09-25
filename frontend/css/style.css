@@ -121,7 +121,21 @@ button[aria-pressed="true"] {
   background: color-mix(in srgb, var(--danger) 20%, transparent);
 }
 
+/* read-only: the translation direction can't be changed mid-session, so this
+   badge must never look clickable/interactive like .lang-toggle does */
+.badge-direction {
+  cursor: default;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
 .empty { color: var(--muted); text-align: center; margin-top: 32px; }
+
+.monitor-global { font-weight: 600; }
+.monitor-global.alert { color: var(--danger); }
+.monitor-table td.alert { color: var(--danger); font-weight: 700; }
+.monitor-table tr.alert-row { background: color-mix(in srgb, var(--danger) 10%, transparent); }
 
 /* --- caption view --- */
 
@@ -214,6 +228,26 @@ body.contrast .captions { font-weight: 700; }
 @media (min-width: 768px) {
   .line { max-width: 40ch; }
 }
+
+/* overlay mode for OBS/vMix (T3.1): no chrome, chroma/transparent bg,
+   text with a 4-direction outline so it reads over any video underneath. */
+body.overlay { background: transparent; }
+body.overlay.bg-transparent { background: transparent; }
+body.overlay.bg-green { background: #00ff00; }
+body.overlay .bar,
+body.overlay .notice { display: none; }
+body.overlay .caption-view { background: transparent; }
+body.overlay .caption-view .captions {
+  justify-content: flex-end;
+  align-items: center;
+  padding-bottom: max(48px, env(safe-area-inset-bottom));
+}
+body.overlay .line {
+  max-width: 80ch;
+  color: #fff;
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
+}
+body.overlay .line.interim { color: #e2e2e2; }
 
 /* --- stage view (T2.8) --- */
 

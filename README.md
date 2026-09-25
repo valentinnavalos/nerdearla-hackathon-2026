@@ -115,6 +115,34 @@ Lectura: el proyecto **sí sostiene 2 sesiones simultáneas**; lo que degrada a 
 
 **Segmentador:** el corte por silencio pasó de 1,2 s a **2,0 s** (`SEGMENT_IDLE_S`, provisorio). Reproduciendo sin red los fragmentos reales del spike EN (cadencia normal), los cortes por silencio bajan de 4 a 1 en el original y de 10 a 8 en la traducción, con la misma cantidad de finales (34 y ~25). Los finales cortos que quedan en la traducción ("Este," o "para") vienen de sus frenazos de más de 2 s: ningún corte fijo los evita.
 
+## Modo overlay para OBS/vMix (T3.1)
+
+`index.html` acepta parámetros extra para usarse como fuente de navegador en un
+switcher, quemando los subtítulos traducidos sobre el video en vivo:
+
+```
+https://TU-SPACE.hf.space/?s=ID&lang=es&overlay=1&bg=transparent&size=L&lines=2
+```
+
+| Parámetro | Valores | Qué hace |
+|---|---|---|
+| `overlay=1` | — | Oculta la barra superior y deja solo el texto sobre fondo transparente/chroma |
+| `bg` | `transparent` (default) · `green` | Fondo transparente o verde puro (`#00ff00`) para chroma key |
+| `size` | `L` | Usa el tamaño de letra más grande disponible |
+| `lines` | número (default `3`) | Cuántas líneas de subtítulo mostrar a la vez |
+
+El texto se muestra en blanco con contorno negro (4 direcciones) para leerse
+sobre cualquier fondo de video.
+
+**OBS Studio:** agregar una fuente **Browser Source**, 1920×1080, con esa URL
+(tildar "Shutdown source when not visible" apagado para no perder la conexión
+del WS al cambiar de escena). Con `bg=transparent` la fuente ya sale sin fondo,
+sin necesidad de chroma key.
+
+**vMix:** agregar una entrada **Web Browser** con la misma URL y el tamaño de
+la escena (1920×1080); si vMix no soporta transparencia real en esa entrada,
+usar `bg=green` y aplicarle un filtro de chroma key verde.
+
 ## Muestras
 
 | Archivo | Contenido |

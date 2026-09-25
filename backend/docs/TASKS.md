@@ -47,9 +47,9 @@
 | T2.10c | 2 salas × 20 min en el Space | AB | 30 min | P0 | 2 | |
 | T2.10d | Rotación/reanudación con 2 salas | A | 20 min | P0 | 2 | |
 | T2.11 | Video de emergencia | AB | 30 min | P0 | 2 | |
-| T3.1 | Modo overlay para OBS/vMix | B | 35 min | P1 | 3 | |
-| T3.2 | Panel de monitoreo | B | 1 h | P1 | 3 | |
-| T3.3 | Exports SRT / VTT / TXT / MD | A | 45 min | P1 | 3 | |
+| T3.1 | Modo overlay para OBS/vMix | B | 35 min | P1 | 3 | ✅ |
+| T3.2 | Panel de monitoreo | B | 1 h | P1 | 3 | ✅ |
+| T3.3 | Exports SRT / VTT / TXT / MD | A | 45 min | P1 | 3 | ✅ |
 | T3.4 | Knowledge Pack (generación) | A | 50 min | P1 | 3 | |
 | T3.5 | Página de la charla (post-talk) | B | 1.2 h | P1 | 3 | |
 | T3.6 | "Preguntale a la charla" | A | 30 min | P1 | 3 | |
@@ -703,6 +703,8 @@ license: mit
 
 #### T3.1 · Modo overlay — B · 35 min · P1
 
+**Estado:** ✅ Completo — `index.html` lee `overlay=1&bg=transparent|green&size=L&lines=N`, oculta `.bar`/`.notice` y aplica `body.overlay(.bg-transparent|.bg-green)` (nuevo bloque en `style.css`) con texto blanco y contorno de 4 direcciones. `size=L` y `lines` no se persisten en `localStorage` (a diferencia de A−/A+ del modo normal), para que OBS siempre abra con lo que diga la URL. Documentado en el README con instrucciones para OBS (Browser Source) y vMix (Web Browser + chroma si hace falta).
+
 **Funcional:** subtítulos traducidos quemados en el stream (pain point confirmado por la organización).
 
 **Técnico:**
@@ -715,6 +717,8 @@ license: mit
 
 #### T3.2 · Panel de monitoreo — B · 1 h · P1 · depende de T2.4
 
+**Estado:** ✅ Completo — `/ws/admin?token=` (`backend/api/ws.py`) manda cada 1 s el mismo shape de `GET /api/sessions` (`sessions`, `live_usage`, `quota`); `Session.info()` suma `uptime_s` y `mic_connected`, y `SessionMetrics.snapshot()` suma `last_frame_age_s` (monotonic absoluto, separado del `t` relativo a la sesión que ya usaban las latencias). Frontend: `admin.js::openAdminSocket()` (reconexión con backoff) alimenta una tabla nueva en `admin.html` (estado, uptime, mic + antigüedad de frame, alerta de silencio, latencia final p50/p95, rotaciones/reconexiones/errores, último error, oyentes) y una fila global (cupo Live, cuota del día, costo fijo USD 0), resaltando en rojo `ERROR`/silencio/mic desconectado/cuota > 80 % (`.alert`/`.alert-row` en `style.css`). `tests/test_ws_admin.py` cubre el rechazo de token inválido y el snapshot periódico.
+
 **Funcional:** el equipo ve de un vistazo si alguna sala tiene problemas.
 
 **Técnico:**
@@ -726,6 +730,8 @@ license: mit
 **Listo cuando:** desenchufar el mic (o parar el envío) se refleja en el panel en < 5 s.
 
 #### T3.3 · Exports — A · 45 min · P1 · depende de T2.3
+
+**Estado:** ✅ Completo — `backend/post/exports.py`: `build_cues()` parte finales largos proporcionalmente al largo de cada trozo (máx 42 car./línea, 2 líneas, 7 s, mín 1 s, sin solapes) y `median_latency_ms()` calcula el offset a partir de los `lat_ms` ya guardados en `captions.jsonl` (no depende de `SessionContext.metrics`, así funciona con la sala parada o recargada tras un restart). Formateadores puros `to_srt/to_vtt/to_txt/to_md`. Ruta pública `GET /api/sessions/{id}/export.{srt,vtt,txt,md}?lang=` en `backend/api/sessions.py`. `tests/test_exports.py` (10 casos) cubre timestamps, partido proporcional, duración mínima y marcas `[mm:ss]` del MD; validado además end-to-end con una sala `ENGINE=replay`.
 
 **Funcional:** al terminar, descargar la transcripción completa en formatos estándar.
 

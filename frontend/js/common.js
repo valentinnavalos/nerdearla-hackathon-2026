@@ -65,6 +65,21 @@ export const sessionStore = {
   },
 };
 
+const LANG_SHORT = { es: "ES", en: "EN" };
+
+// The translation direction is fixed for the whole session (backend never
+// re-derives target_lang once the Session is created), so this is a
+// read-only badge, distinct from the interactive .lang-toggle.
+export function renderDirectionBadge(sourceLang, targetLang) {
+  const source = LANG_SHORT[sourceLang] ?? sourceLang;
+  const target = LANG_SHORT[targetLang] ?? targetLang;
+  return el(
+    "span",
+    { class: "badge badge-direction", title: "Dirección fija de la sesión: no se puede cambiar" },
+    document.createTextNode(`${source} → ${target} 🔒`)
+  );
+}
+
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {

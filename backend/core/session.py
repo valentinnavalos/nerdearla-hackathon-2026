@@ -185,6 +185,8 @@ class Session:
             "started_at": self.started_at,
             "stopped_at": self.stopped_at,
             "last_error": self.last_error,
+            "uptime_s": (time.time() - self.started_at) if self.running and self.started_at else None,
+            "mic_connected": self.mic_connected() if self.source == "mic" else None,
             "metrics": {
                 "events": self.events,
                 "dropped_frames": self.dropped_frames,
