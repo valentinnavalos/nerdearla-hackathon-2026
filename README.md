@@ -60,22 +60,115 @@ En Docker: `docker run --rm --env-file .env nerdearla-captions python -m backend
 
 ## Arquitectura
 
-Cada sala corre su propia tubería (una `asyncio.Task`), aislada del resto: si una falla no afecta a las demás. Todas comparten un único proceso FastAPI dentro de un Space (2 vCPU / 16 GB gratis).
+Cada sala corre su propia tubería (una `asyncio.Task`), aislada del resto: si una falla no afecta a las demás. Todas comparten un único proceso FastAPI dentro de un Space (2 vCPU / 16 GB gratis). El frontend es una SPA React servida por el mismo FastAPI (`web/dist/`).
 
-```
-Mini PC (browser, HTTPS)                 HF Space (Docker gratis)
-┌─────────────────────┐   WS audio PCM   ┌──────────────────────────────────────┐
-│ Vista escenario:    │ ───────────────► │ Stage worker (1 task por sala)       │
-│ captura placa audio │                  │  ├─ LiveSessionRunner ◄─WS─► Gemini  │
-│ + subtítulos + QR   │ ◄── captions ─── │  │   (rotación ~9 min, ring buffer)  │
-└─────────────────────┘                  │  ├─ Glosario (post-proceso)         │
- FileSource (mp3) ─────────────────────► │  └─ captions.jsonl                  │
-Celulares (QR) / Overlay OBS ◄── WS ──── │ SessionManager: pub/sub, métricas    │
-Panel de monitoreo ◄── WS ────────────── │ Al stop: exports SRT/VTT/TXT/MD      │
-                                          └──────────────────────────────────────┘
+```mermaid
+flowchart LR
+  OP["👩‍💻 Operador<br/>/admin"]
+  STG["🎤 Escenario<br/>/stage/:id"]
+  WATCH["📱 Público<br/>/watch/:id"]
+  OVER["📺 OBS / vMix<br/>/overlay/:id"]
+
+  subgraph APP["☁️ FastAPI · un proceso (Docker / HF Space)"]
+    direction TB
+    API["api/<br/>REST /api/sessions·... + WS /ws/ingest · /ws/captions · /ws/admin"]
+    MGR["core/manager.py<br/>SessionManager"]
+    SES["core/session.py<br/>Session · 1 asyncio.Task por sala"]
+    PIPE["sources/ + engine/<br/>LiveSessionRunner"]
+    POST["post/exports.py<br/>SRT · VTT · TXT · MD"]
+    DATA[("data/sessions/&lt;id&gt;/<br/>captions.jsonl · meta.json")]
+
+    API --> MGR --> SES --> PIPE
+    SES --> DATA
+    SES -.->|"al hacer Stop"| POST --> DATA
+  end
+
+  GEM(["Gemini Live API<br/>gemini-*-live-translate-preview"])
+  FLASH(["Gemini Flash-Lite<br/>Knowledge Pack"])
+  NB(["NotebookLM"])
+
+  STG -->|"WS /ws/ingest/{id}<br/>audio PCM 16kHz"| API
+  API -->|"WS /ws/captions/{id}"| STG
+  OP -->|"REST create/start/stop<br/>+ WS /ws/admin"| API
+  API -->|"WS /ws/captions/{id}?lang="| WATCH
+  API -->|"WS /ws/captions/{id}?lang=&overlay"| OVER
+  PIPE <-->|"WSS"| GEM
+  POST -.->|"roadmap: no implementado"| FLASH
+  FLASH -.->|"roadmap: no implementado"| NB
 ```
 
-Diagrama completo y alternativas evaluadas: [`backend/docs/PLAN.md` §2.4](backend/docs/PLAN.md#24-flujo-de-datos).
+### Pipeline de ingesta
+
+Camino que recorre el audio hasta convertirse en subtítulos. Solo el Camino 1 (`live_translate`) está implementado hoy; el Camino 2 queda en el código como stub.
+
+```mermaid
+flowchart LR
+  subgraph FUENTE["Fuente de audio"]
+    MIC["🎙️ Mic navegador<br/>getUserMedia → AudioWorklet<br/>PCM16 16kHz, frames de 100ms"]
+    FILE["📁 FileSource<br/>mp3 → ffmpeg → PCM"]
+  end
+
+  WSI["WS /ws/ingest/{id}"]
+  FQ["FrameQueue<br/>5 s, descarta lo más viejo"]
+  RUN["LiveSessionRunner<br/>envía frames + maneja rotación (~9 min)"]
+
+  MIC -->|"binario"| WSI --> FQ
+  FILE --> FQ
+  FQ --> RUN
+
+  subgraph MOTOR["Camino 1 (activo) · ENGINE=live_translate"]
+    GEM["Gemini Live<br/>transcribe + traduce en un solo call"]
+  end
+
+  subgraph C2["Camino 2 (no implementado) · stub"]
+    G2["Gemini Transcribe Live"]
+    AR["Argos<br/>traducción local"]
+  end
+
+  RUN <-->|"WSS, ring buffer 2.5s"| GEM
+  RUN -.->|"no implementado"| G2 -.-> AR
+
+  SEG["Segmenter<br/>deltas → interim / final"]
+  DEDUPE["dedupe_overlap<br/>evita repetidos tras reconectar"]
+  GLOS["Glossary<br/>reemplazos + mayúsculas"]
+  EVT["CaptionEvent"]
+
+  GEM --> SEG --> DEDUPE --> GLOS --> EVT
+  AR -.-> EVT
+
+  EVT --> HIST["Historial en memoria<br/>últimos 50 finales"]
+  EVT --> JSONL[("captions.jsonl")]
+  EVT --> SUB["Suscriptores por idioma<br/>WS /ws/captions/{id}?lang="]
+```
+
+### Flujo de uso
+
+Desde que el operador crea la sala hasta que el público ve el resumen al terminar la charla.
+
+```mermaid
+flowchart TD
+  subgraph OPERADOR["Operador"]
+    A1["Crear sala<br/>/admin"] --> A2["Start"]
+    A2 --> A3["Abrir /stage/:id<br/>conectar mic o elegir archivo"]
+    A3 --> A4["Monitorear<br/>panel WS /ws/admin"]
+    A4 --> A5["Stop al terminar"]
+  end
+
+  subgraph PUBLICO["Público"]
+    B1["Escanear QR<br/>o abrir /watch/:id"] --> B2["Elegir idioma ES / EN"]
+    B2 --> B3["Subtítulos en vivo"]
+  end
+
+  A3 -.->|"QR en pantalla"| B1
+  A3 -->|"WS /ws/captions"| B3
+  A5 --> C1["Exports<br/>SRT · VTT · TXT · MD"]
+  B3 --> C2{"¿Charla terminada?"}
+  C2 -->|No| B3
+  C2 -->|Sí| C3["/talk/:id<br/>Próximamente:<br/>Knowledge Pack y quiz"]
+  C1 --> C3
+```
+
+Diagrama completo y alternativas evaluadas: [`backend/docs/PLAN.md` §2.4](backend/docs/PLAN.md#24-flujo-de-datos) y [`backend/docs/DIAGRAMS.md`](backend/docs/DIAGRAMS.md) (versión extendida, 11 diagramas).
 
 **Decisión de caminos:** el proyecto usa el **Camino 1** (`ENGINE=live_translate`), el modelo `gemini-*-live-translate-preview` que transcribe y traduce en la misma llamada. El **Camino 2** (`transcribe_mt`: transcripción + traducción local con Argos) está en el código como fallback pero **no está implementado/probado** — ver `PLAN.md §2.1` para por qué se descartó como default (el free tier no sostiene el costo de dos modelos por sala).
 
