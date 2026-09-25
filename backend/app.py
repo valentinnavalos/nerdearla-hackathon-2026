@@ -4,12 +4,13 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.api import sessions, ws
 from backend.config import Settings, configure_logging, get_settings
-from backend.core.manager import SessionManager
+from backend.core.manager import CapacityError, SessionManager, SessionNotFound
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -56,4 +57,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Nerdearla Live Captions", lifespan=lifespan)
 app.include_router(sessions.router)
 app.include_router(ws.router)
+
+
+@app.exception_handler(SessionNotFound)
+async def _not_found(request: Request, exc: SessionNotFound) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": f"session not found: {exc}"})
+
+
+@app.exception_handler(CapacityError)
+async def _capacity(request: Request, exc: CapacityError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(ValueError)
+async def _bad_value(request: Request, exc: ValueError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")  # last: catch-all
