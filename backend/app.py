@@ -32,22 +32,47 @@ class SPAStaticFiles(StaticFiles):
             return await super().get_response("index.html", scope)
 
 
+PITCH_ROOMS = [
+    {
+        "title": "Interview with Rob Pike",
+        "speaker": "Rob Pike",
+        "source_lang": "en",
+        "file": "samples/en_talk_3min.mp3",
+        "loop": True,
+    },
+    {
+        "title": "Brownfield Engineering",
+        "speaker": "Nicolás Páez",
+        "source_lang": "es",
+        "file": "samples/es_talk_2min.mp3",
+        "loop": True,
+    },
+    {
+        "title": "Human-Centric Engineering",
+        "speaker": "Ben Popplestone",
+        "source_lang": "en",
+        "file": "samples/human-centric-eng-by-ben-popplestone.mp3",
+        "loop": True,
+    },
+]
+
+
 def seed_demo(manager: SessionManager, settings: Settings) -> None:
-    """Demo room created at startup, until the operator console exists (T2.9).
-    ENGINE=replay always gets one (no API usage); other engines only with DEMO_FILE."""
+    """Pitch-ready rooms created at startup, until the operator console exists (T2.9).
+    ENGINE=replay gets a single replay room (no API usage); other engines get the 3 PITCH_ROOMS."""
     if settings.engine == "replay":
         session = manager.create("Demo", speaker="Replay de ejemplo", source_lang="en")
-    elif settings.demo_file:
-        session = manager.create(
-            "Demo",
-            speaker=Path(settings.demo_file).stem,
-            source_lang=settings.demo_lang,
-            file=settings.demo_file,
-            loop=settings.demo_loop,
-        )
-    else:
+        manager.start(session.id)
         return
-    manager.start(session.id)
+    for room in PITCH_ROOMS:
+        session = manager.create(
+            room["title"],
+            speaker=room["speaker"],
+            source_lang=room["source_lang"],
+            file=room["file"],
+            loop=room["loop"],
+        )
+        manager.start(session.id)
 
 
 @asynccontextmanager

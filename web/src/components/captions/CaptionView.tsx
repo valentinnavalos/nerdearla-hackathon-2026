@@ -17,7 +17,7 @@ export function CaptionView({ segments, lines = 3, overlay = false, className }:
       aria-live="polite"
       className={cn(
         "flex flex-1 min-h-0 flex-col justify-end gap-[0.35em] overflow-hidden px-4 pb-6 pt-4 [overflow-wrap:anywhere]",
-        overlay && "absolute inset-0 items-center justify-end pb-12 text-center",
+        overlay && "pointer-events-none absolute inset-0 items-center justify-end pb-12 text-center",
         className,
       )}
     >

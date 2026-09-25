@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     live_translate_model: str = "gemini-3.5-live-translate-preview"
     transcribe_model: str = "gemini-3.5-transcribe-live"
     kp_model: str = "gemini-3.1-flash-lite"
-    max_concurrent_live: int = 2
+    max_concurrent_live: int = 4
     rotate_after_s: int = 540
     quota_live_sessions_per_day: int = 0
     notebooklm_enabled: bool = False

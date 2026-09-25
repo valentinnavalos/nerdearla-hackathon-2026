@@ -34,13 +34,7 @@ export function MicPanel({ sessionId, token, currentStatus }: MicPanelProps) {
 
   async function ensureSessionStarted() {
     if (currentStatus && RUNNING_STATUSES.has(currentStatus)) return
-    try {
-      await startSession(token, sessionId)
-    } catch (err) {
-      // a room already running (race with another admin, or a stale `status`) is fine
-      const msg = String(err instanceof Error ? err.message : err)
-      if (!msg.startsWith("409") && !msg.startsWith("500")) throw err
-    }
+    await startSession(token, sessionId)
   }
 
   async function toggle() {
