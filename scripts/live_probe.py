@@ -10,7 +10,7 @@ B is silent" reproduces here, the limit is on the Live service/quota side, not i
     python -m scripts.live_probe --sessions 2 --model gemini-3.5-transcribe-live
     python -m scripts.live_probe --resume                              # close + resume with the handle
 
-Raw log: DATA_DIR/probe/<timestamp>-<pid>.jsonl
+Raw log: DATA_DIR/probe/<timestamp>-<pid>.jsonl (first line: branch + commit + date + SDK)
 """
 
 import argparse
@@ -25,6 +25,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
+from scripts.report_meta import run_meta
 
 FRAME_BYTES = 3200  # 100 ms of 16 kHz mono PCM16
 FRAME_S = 0.1
@@ -222,6 +224,7 @@ async def main_async(args) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{int(time.time())}-{os.getpid()}.jsonl"
     with log_path.open("w") as log:
+        log.write(json.dumps({"ev": "meta", **run_meta(args)}, default=str) + "\n")  # branch + commit + date
         for trial in range(1, args.trials + 1):
             probes = [
                 Probe(chr(ord("A") + i), pcms[i % len(pcms)], args, log, delay=i * args.stagger)

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from collections import deque
 from typing import Any, AsyncIterable, Awaitable, Callable
 
 from google import genai
@@ -16,6 +17,7 @@ OnError = Callable[[Exception], Awaitable[None]]
 OnRaw = Callable[[types.LiveServerMessage], Awaitable[None]]  # every message, for the spike
 
 _log = logging.getLogger("backend.engine")
+TEXT_TIMES_KEPT = 20000  # ~5 h of fragments at 1/s per track: bounded even for a long room
 
 
 class LiveSessionRunner:
@@ -67,6 +69,12 @@ class LiveSessionRunner:
             "resumption_handle": None,  # latest one, for resuming the session (T2.1)
             "last_consumed_index": None,
             "dispatch_ms_max": 0.0,  # callbacks must never block the receive loop
+            # seconds after connecting of every message carrying text: the probes derive the gaps
+            # from it (a session can keep sending audio/usage while the captions stall)
+            "text_times": deque(maxlen=TEXT_TIMES_KEPT),
+            "last_text_s": None,
+            "first_error_s": None,  # seconds after connecting (after starting if it never connected)
+            "errors": 0,
         }
         t_connect = time.monotonic()
         try:
@@ -92,9 +100,17 @@ class LiveSessionRunner:
             self.log.info("live cancelled (%s)", self._summary())
             raise
         except Exception as e:
+            self._error(t_connect)
             self.log.warning("live closed with %s: %s (%s)", type(e).__name__, e, self._summary())
             raise
         self.log.info("live closed (%s)", self._summary())
+
+    def _error(self, t_start: float | None = None) -> None:
+        st = self.stats
+        st["errors"] += 1
+        if st["first_error_s"] is None:
+            origin = self._connected_at or t_start or time.monotonic()
+            st["first_error_s"] = round(time.monotonic() - origin, 3)
 
     def _summary(self) -> str:
         st = self.stats
@@ -150,6 +166,9 @@ class LiveSessionRunner:
                 for tr in (content.input_transcription, content.interim_input_transcription,
                            content.output_transcription)
             )
+            if has_text:
+                st["text_times"].append(round(since, 3))
+                st["last_text_s"] = since
             if has_text and st["first_text_s"] is None:
                 st["first_text_s"] = since
                 self.log.info("live first transcription after %.1f s", since)
@@ -186,6 +205,7 @@ class LiveSessionRunner:
             if msg.go_away is not None and self.on_go_away:
                 await self.on_go_away(msg.go_away.time_left)
         except Exception as e:
+            self._error()
             if self.on_error:
                 await self.on_error(e)
             else:

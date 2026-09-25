@@ -60,7 +60,9 @@ def test_replay_keeps_pace_and_shifts_segments_per_lap(replay_file):
 
 
 def test_healthz_and_public_sessions(client):
-    assert client.get("/healthz").json() == {"ok": True, "engine": "replay"}
+    health = client.get("/healthz").json()
+    assert health["ok"] is True and health["engine"] == "replay"
+    assert set(health["loop_lag_ms"]) >= {"samples", "lag_ms_p99", "lag_ms_max"}
     sessions = client.get("/api/public/sessions").json()
     assert [s["id"] for s in sessions] == ["demo"]
     assert sessions[0]["status"] == "RUNNING"

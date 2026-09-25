@@ -154,22 +154,79 @@ def test_slow_disk_never_delays_emit_nor_other_rooms(settings, monkeypatch):
     async def main():
         m = _manager(FakeEngine(n=20, gap=0.05), settings)
         a, b = m.create("Sala A", source_lang="en"), m.create("Sala B", source_lang="es")
-        q_b = m.subscribe(b.id, "es")
+        q_a, q_b = m.subscribe(a.id, "en"), m.subscribe(b.id, "es")
         m.start(a.id)
         m.start(b.id)
-        arrivals = []
-        while len(arrivals) < 20:
-            msg = await asyncio.wait_for(q_b.get(), timeout=1)
-            if msg["type"] == "caption":
-                arrivals.append(time.monotonic())
+
+        async def arrivals_of(queue):
+            times = []
+            while len(times) < 20:
+                msg = await asyncio.wait_for(queue.get(), timeout=1)
+                if msg["type"] == "caption":
+                    times.append(time.monotonic())
+            return times
+
+        arrivals_a, arrivals_b = await asyncio.gather(arrivals_of(q_a), arrivals_of(q_b))
         await asyncio.gather(a._task, b._task)
         await asyncio.gather(a.stop(), b.stop())
-        return a, arrivals
+        return a, arrivals_a, arrivals_b
 
-    a, arrivals = asyncio.run(main())
-    gaps = [y - x for x, y in zip(arrivals, arrivals[1:])]
-    assert max(gaps) < 0.2  # room B keeps its 50 ms pace while every write takes 300 ms
+    a, arrivals_a, arrivals_b = asyncio.run(main())
+    for arrivals in (arrivals_a, arrivals_b):  # the writing room's own subscribers and the other room's
+        gaps = [y - x for x, y in zip(arrivals, arrivals[1:])]
+        assert max(gaps) < 0.2  # both keep their 50 ms pace while every write takes 300 ms
     lines = [json.loads(line) for line in a.captions_path.read_text().splitlines()]
     assert [line["text"] for line in lines if line["lang"] == "en"] == [f"en {i}" for i in range(1, 21)]
     assert all(line["final"] for line in lines) and len(lines) == 40
     assert a.info()["metrics"]["captions_written"] == 40
+
+
+class InterimEngine(FakeEngine):
+    """Emits an interim and then the final of each segment, like the Live engine."""
+
+    async def run(self, frames, emit, ctx):
+        for i in range(1, self.n + 1):
+            for final in (False, True):
+                await emit(CaptionEvent(
+                    session_id=ctx.session_id, lang=ctx.source_lang, kind="orig", seg=i,
+                    final=final, text=f"t {i}" + ("." if final else ""), t0=i, t1=i,
+                ))
+            await asyncio.sleep(self.gap)
+
+
+def test_only_finals_are_persisted(settings):
+    async def main():
+        m = _manager(InterimEngine(n=5), settings)
+        room = m.create("Sala", source_lang="en")
+        q = m.subscribe(room.id, "en")
+        m.start(room.id)
+        await asyncio.gather(room._task)
+        await room.stop()
+        return room, [msg for msg in _drain(q) if msg["type"] == "caption"]
+
+    room, received = asyncio.run(main())
+    assert len(received) == 10  # the audience gets the interims...
+    lines = [json.loads(line) for line in room.captions_path.read_text().splitlines()]
+    assert [line["text"] for line in lines] == [f"t {i}." for i in range(1, 6)]  # ...the file only finals
+
+
+def test_failing_disk_never_takes_the_room_down(settings, monkeypatch):
+    def broken_append(self, lines):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(persistence.CaptionWriter, "_append", broken_append)
+
+    async def main():
+        m = _manager(FakeEngine(n=10, gap=0.01), settings)
+        room = m.create("Sala", source_lang="en")
+        q = m.subscribe(room.id, "en")
+        m.start(room.id)
+        await asyncio.gather(room._task)
+        await room.stop()
+        return room, [msg for msg in _drain(q) if msg["type"] == "caption"]
+
+    room, received = asyncio.run(main())
+    assert room.status == SessionStatus.STOPPED and room.last_error is None
+    assert [msg["text"] for msg in received] == [f"en {i}" for i in range(1, 11)]
+    metrics = room.info()["metrics"]
+    assert metrics["write_errors"] >= 1 and metrics["captions_written"] == 0

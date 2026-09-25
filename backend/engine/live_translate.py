@@ -25,6 +25,7 @@ class LiveTranslateEngine(Engine):
         self.model = model
         self.idle_s = idle_s  # silence that closes a segment; ~1 s fragment cadence (max 2 s) per T1.4
         self.runner: LiveSessionRunner | None = None  # exposes runner.stats (T2.4)
+        self.callback_errors = 0
 
     @staticmethod
     def build_config(target_lang: str) -> types.LiveConnectConfig:
@@ -68,6 +69,7 @@ class LiveTranslateEngine(Engine):
             await out(trans.feed(text, now()), ctx.target_lang, "trans")
 
         async def on_error(exc: Exception) -> None:
+            self.callback_errors += 1
             log.error("callback error %s: %s", type(exc).__name__, exc)
 
         async def ticker() -> None:

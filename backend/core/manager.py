@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable
 
 from backend.config import DEFAULT_GLOSSARY_PATH, Settings
+from backend.core.capacity import CapacityError, CapacityGuard
 from backend.core.glossary import Glossary
 from backend.core.session import LANGS, Session, slugify
 from backend.engine.base import Engine
@@ -13,10 +14,6 @@ from backend.engine.factory import create_engine
 
 class SessionNotFound(KeyError):
     pass
-
-
-class CapacityError(RuntimeError):
-    """No free Gemini Live slot: the room is not started (the API answers 409, T2.5)."""
 
 
 class SessionManager:
@@ -32,7 +29,7 @@ class SessionManager:
             default_glossary = Glossary.load(DEFAULT_GLOSSARY_PATH)
         self.default_glossary = default_glossary or Glossary()
         self._sessions: dict[str, Session] = {}
-        self._live_rooms: set[str] = set()  # rooms holding a Live slot, for their whole run
+        self.capacity = CapacityGuard(settings.max_concurrent_live)  # a room keeps its slot for its whole run
 
     def create(
         self,
@@ -90,26 +87,26 @@ class SessionManager:
         except Exception as e:
             session.fail(f"{type(e).__name__}: {e}")
             raise
+        reserved = engine.uses_live and not self.capacity.holds(session.id)
         if engine.uses_live:
-            # capacity guard: reject instead of queueing; a room keeps its slot through rotations
-            usage = self.live_usage()
-            if session.id not in self._live_rooms and usage["used"] >= usage["max"]:
-                raise CapacityError(
-                    f"cupo Live lleno ({usage['used']}/{usage['max']}): pará otra sala o subí MAX_CONCURRENT_LIVE"
-                )
-        session.start(engine)
+            self.capacity.reserve(session.id)  # before starting; raises CapacityError, never queues
+        try:
+            session.start(engine)
+        except Exception:
+            if reserved:  # roll back only a slot taken here, never the one of a room already running
+                self.capacity.release(session.id)
+            raise
         if engine.uses_live:
-            self._live_rooms.add(session.id)
             session.on_done(lambda: self._release_slot(session))
         return session
 
     def _release_slot(self, session: Session) -> None:
         if not session.running:  # a quick restart may already hold the slot again
-            self._live_rooms.discard(session.id)
+            self.capacity.release(session.id)
 
     def live_usage(self) -> dict[str, int]:
         """Live slots in use vs MAX_CONCURRENT_LIVE (for the panel, T3.2)."""
-        return {"used": len(self._live_rooms), "max": self.settings.max_concurrent_live}
+        return self.capacity.usage()
 
     async def stop(self, session_id: str) -> Session:
         session = self.require(session_id)

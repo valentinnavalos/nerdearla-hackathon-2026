@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 
 _log = logging.getLogger("backend.persistence")
@@ -19,6 +20,7 @@ class CaptionWriter:
         self.log = log or _log
         self.written = 0
         self.write_errors = 0
+        self.append_ms_max = 0.0  # slowest disk append (it runs in a thread: slow disk != blocked loop)
         self._queue: asyncio.Queue[dict | None] = asyncio.Queue()
         self._task: asyncio.Task | None = None
 
@@ -42,9 +44,11 @@ class CaptionWriter:
                 batch.append(self._queue.get_nowait())
             lines = [msg for msg in batch if msg is not None]
             if lines:
+                t = time.perf_counter()
                 try:
                     await asyncio.to_thread(self._append, lines)
                     self.written += len(lines)
+                    self.append_ms_max = max(self.append_ms_max, (time.perf_counter() - t) * 1000)
                 except OSError as e:  # disk full, permissions...: log it, never take the room down
                     self.write_errors += 1
                     self.log.error("captions.jsonl write failed: %s", e)

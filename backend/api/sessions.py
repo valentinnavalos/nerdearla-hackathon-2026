@@ -24,7 +24,14 @@ router = APIRouter()
 
 @router.get("/healthz")
 def healthz(request: Request) -> dict:
-    return {"ok": True, "engine": request.app.state.settings.engine}
+    """`loop_lag_ms`: event-loop lag over the last 10 s (the audience load test polls it)."""
+    state = request.app.state
+    monitor = getattr(state, "loop_monitor", None)
+    return {
+        "ok": True,
+        "engine": state.settings.engine,
+        "loop_lag_ms": monitor.stats(window_s=10) if monitor else None,
+    }
 
 
 @router.get("/api/public/sessions")

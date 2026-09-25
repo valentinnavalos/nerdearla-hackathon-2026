@@ -120,6 +120,7 @@ class Session:
                 "listeners": self.listeners(),
                 "captions_written": self._writer.written if self._writer else 0,
                 "write_errors": self._writer.write_errors if self._writer else 0,
+                "append_ms_max": round(self._writer.append_ms_max, 1) if self._writer else 0.0,
             },
         }
 

@@ -12,7 +12,7 @@ DEFAULT_GLOSSARY_PATH = "config/glossary.default.json"
 
 
 class Settings(BaseSettings):
-    """Every env var from the TASKS.md table (plus fallback A and the demo seed)."""
+    """Every env var from the README table (plus fallback A and the demo seed)."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     live_translate_model: str = "gemini-3.5-live-translate-preview"
     transcribe_model: str = "gemini-3.5-transcribe-live"
     kp_model: str = "gemini-3.1-flash-lite"
-    max_concurrent_live: int = 2
+    max_concurrent_live: int = 2  # operational safety limit, not Gemini's (docs/CONCURRENCY-REPORT.md)
     rotate_after_s: int = 540
     quota_live_sessions_per_day: int = 0
     notebooklm_enabled: bool = False
@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     demo_file: str = ""
     demo_lang: Lang = "en"
     demo_loop: bool = False
+    demo_rooms: int = 1  # ENGINE=replay only: number of demo rooms (audience load test)
 
 
 @lru_cache
