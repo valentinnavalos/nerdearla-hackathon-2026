@@ -1,0 +1,3 @@
+# Optional (T3.9): unofficial NotebookLM exporter, only used with NOTEBOOKLM_ENABLED=1.
+# `notebooklm login` (local, once) needs the [browser] extra: pip install "notebooklm-py[browser]"
+notebooklm-py>=0.8,<0.9

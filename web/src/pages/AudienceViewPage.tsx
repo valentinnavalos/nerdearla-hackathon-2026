@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react"
 import { Link, useParams, useSearchParams } from "react-router-dom"
+import { PilusoLogo } from "@/components/brand/PilusoLogo"
 import { CaptionView } from "@/components/captions/CaptionView"
 import { DirectionBadge } from "@/components/layout/DirectionBadge"
 import { Button } from "@/components/ui/button"
 import { useCaptionSocket } from "@/hooks/useCaptionSocket"
 import { getPublicSessions } from "@/lib/api"
+import { BRAND_NAME } from "@/lib/brand"
 import { connectionLabel } from "@/lib/connectionLabel"
 import { cn } from "@/lib/utils"
 import { storage } from "@/lib/storage"
@@ -38,7 +40,7 @@ export function AudienceViewPage() {
         const found = rooms.find((r) => r.id === sessionId)
         if (found) {
           setRoom(found)
-          document.title = `${found.title} · Subtítulos`
+          document.title = `${found.title} · Subtítulos · ${BRAND_NAME}`
         }
       })
       .catch(() => {})
@@ -64,8 +66,9 @@ export function AudienceViewPage() {
       style={{ ["--caption-size" as string]: `${FONT_STEPS[fontStep]}rem` }}
     >
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-border bg-background/80 px-5 py-3 backdrop-blur">
-        <Link to="/" className="text-lg" aria-label="Volver a las salas">
-          ←
+        <Link to="/" className="flex items-center gap-1.5 text-lg" aria-label="Volver a las salas">
+          <span aria-hidden="true">←</span>
+          <PilusoLogo variant="mark" className="size-6" />
         </Link>
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{room?.title ?? sessionId}</div>
@@ -122,6 +125,14 @@ export function AudienceViewPage() {
       {(stopped || notFound) && (
         <p className="mx-4 mt-3 rounded-xl border border-border bg-card p-3 text-center">
           {notFound ? "Sala no encontrada · Room not found" : "La charla terminó · The talk has ended"}
+          {stopped && !notFound && (
+            <>
+              {" "}
+              <Link to={`/talk/${sessionId}?lang=${lang}`} className="font-medium text-primary underline">
+                {lang === "es" ? "Ver resumen →" : "See summary →"}
+              </Link>
+            </>
+          )}
         </p>
       )}
 

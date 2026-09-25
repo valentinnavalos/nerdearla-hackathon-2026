@@ -3,7 +3,7 @@
 import asyncio
 import shutil
 from pathlib import Path
-from typing import Callable
+from typing import Awaitable, Callable
 
 from backend.config import DEFAULT_GLOSSARY_PATH, Settings
 from backend.core.glossary import Glossary
@@ -12,6 +12,9 @@ from backend.core.persistence import load_all_meta
 from backend.core.session import LANGS, Session, SessionStatus, slugify
 from backend.engine.base import Engine
 from backend.engine.factory import create_engine
+from backend.post.pipeline import run_post
+
+PostProcessor = Callable[[Session], Awaitable[None]]
 
 
 class SessionNotFound(KeyError):
@@ -22,15 +25,23 @@ class CapacityError(RuntimeError):
     """No free Gemini Live slot: the room is not started (the API answers 409, T2.5)."""
 
 
+class ConflictError(RuntimeError):
+    """The room is in the wrong state for the request (the API answers 409)."""
+
+
 class SessionManager:
     def __init__(
         self,
         settings: Settings,
         engine_factory: Callable[[], Engine] | None = None,
         default_glossary: Glossary | None = None,
+        post_processor: PostProcessor | None = None,
     ):
         self.settings = settings
         self._engine_factory = engine_factory or (lambda: create_engine(settings))
+        self._post_processor = post_processor or (lambda session: run_post(session, settings))
+        self._post_tasks: dict[str, asyncio.Task] = {}  # room id -> running post-talk pipeline
+        self._closing = False
         if default_glossary is None and Path(DEFAULT_GLOSSARY_PATH).exists():
             default_glossary = Glossary.load(DEFAULT_GLOSSARY_PATH)
         self.default_glossary = default_glossary or Glossary()
@@ -125,6 +136,40 @@ class SessionManager:
             self._live_rooms.add(session.id)
             self._quota.increment()
             session.on_done(lambda: self._release_slot(session))
+        session.on_done(lambda: self._schedule_post(session))
+        return session
+
+    def _schedule_post(self, session: Session) -> None:
+        """Knowledge Pack / NotebookLM after a clean stop (T3.4, T3.9): its own task, so Stop never
+        waits for it. Skipped on ERROR, on shutdown and if the room was already restarted."""
+        if self._closing or session.running or session.status != SessionStatus.STOPPED:
+            return
+        self.start_post(session)
+
+    def start_post(self, session: Session) -> asyncio.Task:
+        if self.post_running(session.id):
+            raise ConflictError(f"el resumen de {session.id} ya se está generando")
+        task = asyncio.create_task(self._post_processor(session), name=f"post:{session.id}")
+        self._post_tasks[session.id] = task
+        task.add_done_callback(lambda t: self._post_done(session, t))
+        return task
+
+    def _post_done(self, session: Session, task: asyncio.Task) -> None:
+        if self._post_tasks.get(session.id) is task:
+            del self._post_tasks[session.id]
+        if not task.cancelled() and task.exception() is not None:
+            session.log.error("post-talk pipeline crashed: %r", task.exception())
+
+    def post_running(self, session_id: str) -> bool:
+        task = self._post_tasks.get(session_id)
+        return task is not None and not task.done()
+
+    def regenerate(self, session_id: str) -> Session:
+        """Re-run the post-talk pipeline by hand (reloaded room, earlier error, lost disk)."""
+        session = self.require(session_id)
+        if session.running:
+            raise ConflictError(f"la sala {session_id} sigue corriendo")
+        self.start_post(session)
         return session
 
     def quota_today(self) -> dict:
@@ -149,7 +194,12 @@ class SessionManager:
         shutil.rmtree(self._meta_path(session_id).parent, ignore_errors=True)
 
     async def stop_all(self) -> None:
+        self._closing = True
         await asyncio.gather(*(s.stop() for s in self._sessions.values()), return_exceptions=True)
+        posts = list(self._post_tasks.values())
+        for task in posts:
+            task.cancel()
+        await asyncio.gather(*posts, return_exceptions=True)
 
     def subscribe(self, session_id: str, lang: str) -> asyncio.Queue:
         return self.require(session_id).subscribe(lang)

@@ -15,6 +15,7 @@ Contrato de endpoints (congelado en T0.5):
 | POST     | /api/uploads                                        | admin | Subir mp3                         |
 | GET      | /api/sessions/{id}/export.{srt,vtt,txt,md}?lang=    | --    | Exports (T3.3)                    |
 | GET      | /api/sessions/{id}/knowledge                        | --    | Knowledge Pack (T3.4)             |
+| POST     | /api/sessions/{id}/knowledge/regenerate             | admin | Volver a generar el Knowledge Pack |
 | POST     | /api/sessions/{id}/ask                              | -- (rate limit) | Preguntale a la charla (T3.6) |
 """
 
@@ -24,11 +25,12 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api.auth import require_admin
+from backend.api.ratelimit import client_ip, normalize_question
 from backend.core.persistence import load_captions
-from backend.post import exports
+from backend.post import exports, knowledge
 
 router = APIRouter()
 
@@ -62,6 +64,10 @@ class CreateSessionBody(BaseModel):
     file: str | None = None
     loop: bool = False
     glossary_text: str | None = None
+
+
+class AskBody(BaseModel):
+    q: str = Field(min_length=1, max_length=knowledge.ASK_MAX_CHARS)
 
 
 @router.get("/healthz")
@@ -134,10 +140,9 @@ def export_session(session_id: str, fmt: str, request: Request, lang: str = "es"
         raise HTTPException(404, "sala no encontrada")
     events = load_captions(session.captions_path) if session.captions_path else []
     if fmt == "md":
-        events_by_lang: dict[str, list[dict]] = {}
-        for e in events:
-            events_by_lang.setdefault(e["lang"], []).append(e)
-        body = exports.to_md(session.meta(), events_by_lang)
+        # with the Knowledge Pack on top, the same MD is the "Copiar para NotebookLM" source (capa 3)
+        kp = knowledge.load(session.knowledge_path) if session.kp_status == "ready" else None
+        body = exports.to_md(session.meta(), exports.group_by_lang(events), kp)
     else:
         if lang not in ("en", "es"):
             raise HTTPException(400, "lang debe ser 'en' o 'es'")
@@ -149,6 +154,66 @@ def export_session(session_id: str, fmt: str, request: Request, lang: str = "es"
             cues = exports.build_cues(lang_events, offset_ms=offset_ms)
             body = exports.to_srt(cues) if fmt == "srt" else exports.to_vtt(cues)
     return PlainTextResponse(body, media_type=EXPORT_MEDIA_TYPES[fmt])
+
+
+@router.get("/api/sessions/{session_id}/knowledge")
+def get_knowledge(session_id: str, request: Request) -> dict:
+    session = request.app.state.manager.get(session_id)
+    if session is None:
+        raise HTTPException(404, "sala no encontrada")
+    kp = knowledge.load(session.knowledge_path) if session.kp_status == "ready" else None
+    kp_status = session.kp_status
+    if kp_status == "ready" and kp is None:  # knowledge.json is gone (e.g. Render without a disk)
+        kp_status = "error"
+    return {
+        "kp_status": kp_status,
+        "knowledge": kp,
+        "notebooklm_url": session.notebooklm_url,
+    }
+
+
+@router.post("/api/sessions/{session_id}/knowledge/regenerate", dependencies=[Depends(require_admin)])
+async def regenerate_knowledge(session_id: str, request: Request) -> dict:
+    session = request.app.state.manager.regenerate(session_id)
+    return session.info()
+
+
+@router.post("/api/sessions/{session_id}/ask")
+async def ask_talk(session_id: str, body: AskBody, request: Request) -> dict:
+    settings = request.app.state.settings
+    session = request.app.state.manager.get(session_id)
+    if session is None:
+        raise HTTPException(404, "sala no encontrada")
+    if session.running:
+        raise HTTPException(409, "la charla todavía no terminó")
+    if not settings.gemini_api_key:
+        raise HTTPException(503, "las preguntas no están habilitadas en este servidor")
+    question = body.q.strip()
+    if not question:
+        raise HTTPException(400, "la pregunta está vacía")
+
+    cache = request.app.state.ask_cache
+    cache_key = (session_id, normalize_question(question))
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return {"answer": cached, "cached": True}
+    if not request.app.state.ask_limiter.allow(client_ip(request)):
+        raise HTTPException(429, "Llegaste al límite de preguntas, probá en unos minutos")
+
+    events = load_captions(session.captions_path) if session.captions_path else []
+    transcript = knowledge.source_transcript(session.meta(), events)
+    if not transcript:
+        raise HTTPException(409, "esta charla no tiene transcripción")
+    try:
+        client = knowledge.get_client(settings.gemini_api_key)
+        answer = await knowledge.ask(client, settings.kp_model, session.meta(), transcript, question)
+    except Exception as e:
+        if knowledge.is_overloaded(e):
+            raise HTTPException(429, "Mucha demanda, probá en un minuto")
+        session.log.warning("ask failed: %s: %s", type(e).__name__, e)
+        raise HTTPException(502, "no se pudo responder, probá de nuevo")
+    cache.put(cache_key, answer)
+    return {"answer": answer, "cached": False}
 
 
 @router.post("/api/uploads", dependencies=[Depends(require_admin)])

@@ -4,6 +4,9 @@ WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+# Endorsement next to the logo ("para Nerdearla"); pass --build-arg VITE_PARTNER_NAME= to hide it
+ARG VITE_PARTNER_NAME=Nerdearla
+ENV VITE_PARTNER_NAME=$VITE_PARTNER_NAME
 RUN npm run build
 
 # ---- backend runtime stage ----
@@ -14,8 +17,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # system-wide install, so the image also runs with --user <host uid> in local dev
-COPY requirements.txt /tmp/requirements.txt
+COPY requirements.txt requirements-notebooklm.txt /tmp/
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# optional unofficial NotebookLM exporter (T3.9): off unless the deployer opts in with
+# --build-arg WITH_NOTEBOOKLM=1 (on Render, an env var of the same name reaches the build)
+ARG WITH_NOTEBOOKLM=0
+RUN if [ "$WITH_NOTEBOOKLM" = "1" ]; then pip install --no-cache-dir -r /tmp/requirements-notebooklm.txt; fi
 
 # HF Spaces runs the container as a non-root user with UID 1000
 RUN useradd -m -u 1000 user && chmod 755 /home/user

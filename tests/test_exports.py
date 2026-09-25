@@ -63,9 +63,23 @@ def test_to_txt_joins_finals():
 
 
 def test_to_md_includes_metadata_and_marks():
-    meta = {"title": "Charla X", "speaker": "Ana", "source_lang": "en", "target_lang": "es"}
+    meta = {"title": "Charla X", "speaker": "Ana", "source_lang": "en", "target_lang": "es",
+            "started_at": 1790356160.5}
     events_by_lang = {"es": [{"text": "hola", "t0": 65.0, "t1": 66.0}]}
     out = to_md(meta, events_by_lang)
     assert "# Charla X" in out
     assert "Ana" in out
+    assert "**Inicio:** 2026-09-25 14:09 (ART)" in out
     assert "[01:05] hola" in out
+
+
+def test_to_md_puts_the_knowledge_pack_before_the_transcript():
+    meta = {"title": "Charla"}
+    events = {"es": [{"text": "hola", "t0": 0, "t1": 1}]}
+    kp = {"summary_es": "Resumen corto.", "summary_en": "Short summary.",
+          "key_points": [{"t": "00:10", "es": "punto", "en": "point"}], "terms": ["Kubernetes"]}
+    md = to_md(meta, events, kp)
+    assert md.index("## Resumen") < md.index("## Puntos clave") < md.index("## Transcripción (es)")
+    assert "- [00:10] punto / point" in md
+    assert "**Términos:** Kubernetes" in md
+    assert "## Resumen" not in to_md(meta, events)

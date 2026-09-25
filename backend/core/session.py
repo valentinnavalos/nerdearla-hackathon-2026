@@ -13,7 +13,7 @@ from typing import Callable
 from backend.core.events import CaptionEvent
 from backend.core.glossary import Glossary
 from backend.core.metrics import SessionMetrics
-from backend.core.persistence import CaptionWriter, MetaWriter, load_captions
+from backend.core.persistence import CaptionWriter, MetaWriter, load_captions, write_json
 from backend.engine.base import Engine, SessionContext
 from backend.sources.base import FrameQueue, pump
 from backend.sources.file_source import FileSource
@@ -23,6 +23,7 @@ LANGS = ("en", "es")
 HISTORY_SIZE = 50  # finals kept per language for late joiners
 SUBSCRIBER_QUEUE_SIZE = 100
 FRAME_QUEUE_SIZE = 50  # 5 s of audio
+KP_STATUSES = ("pending", "ready", "error")  # Knowledge Pack generation after Stop (T3.4)
 
 
 class SessionStatus(str, Enum):
@@ -81,6 +82,8 @@ class Session:
         self.started_at: float | None = None
         self.stopped_at: float | None = None
         self.last_error: str | None = None
+        self.kp_status: str | None = None  # None until the post-talk pipeline runs (T3.4)
+        self.notebooklm_url: str | None = None  # set by the optional exporter (T3.9)
         self.events = 0
         self._frames: FrameQueue | None = None
         self._mic_source: MicSource | None = None
@@ -94,7 +97,7 @@ class Session:
         self.log = logging.LoggerAdapter(logging.getLogger("backend.session"), {"session": id})
 
     def meta(self) -> dict:
-        """Snapshot persisted to meta.json (T2.3); Knowledge Pack/NotebookLM keys are stubs for Phase 3."""
+        """Snapshot persisted to meta.json (T2.3), plus the post-talk state (T3.4, T3.9)."""
         return {
             "id": self.id,
             "title": self.title,
@@ -110,9 +113,19 @@ class Session:
             "started_at": self.started_at,
             "stopped_at": self.stopped_at,
             "last_error": self.last_error,
-            "kp_status": None,
-            "notebooklm_url": None,
+            "kp_status": self.kp_status,
+            "notebooklm_url": self.notebooklm_url,
         }
+
+    @property
+    def knowledge_path(self) -> Path | None:
+        return self.meta_path.parent / "knowledge.json" if self.meta_path else None
+
+    def save_meta(self) -> None:
+        """Rewrite meta.json once the run is over (the MetaWriter is already closed).
+        Blocking: call it from asyncio.to_thread."""
+        if self.meta_path is not None:
+            write_json(self.meta_path, self.meta())
 
     @classmethod
     def from_meta(cls, meta: dict, captions_path: Path, meta_path: Path) -> "Session":
@@ -137,6 +150,10 @@ class Session:
         session.started_at = meta.get("started_at")
         session.stopped_at = meta.get("stopped_at")
         session.last_error = meta.get("last_error")
+        kp_status = meta.get("kp_status")
+        # "pending" means the process died mid-generation: nothing is running it anymore
+        session.kp_status = "error" if kp_status == "pending" else (kp_status if kp_status in KP_STATUSES else None)
+        session.notebooklm_url = meta.get("notebooklm_url")
         for msg in load_captions(captions_path):
             lang = msg.get("lang")
             if lang in LANGS:
@@ -173,6 +190,7 @@ class Session:
             "source_lang": self.source_lang,
             "target_lang": self.target_lang,
             "status": self.status.value,
+            "kp_status": self.kp_status,
         }
 
     def info(self) -> dict:

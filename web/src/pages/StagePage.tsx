@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useParams, useSearchParams } from "react-router-dom"
+import { PilusoLogo } from "@/components/brand/PilusoLogo"
 import { CaptionView } from "@/components/captions/CaptionView"
 import { DirectionBadge } from "@/components/layout/DirectionBadge"
 import { MicPanel } from "@/components/stage/MicPanel"
@@ -7,6 +8,7 @@ import { QrCodePanel } from "@/components/stage/QrCodePanel"
 import { Button } from "@/components/ui/button"
 import { useCaptionSocket } from "@/hooks/useCaptionSocket"
 import { getNetworkInfo, getPublicSessions, getSessions } from "@/lib/api"
+import { BRAND_NAME } from "@/lib/brand"
 import { connectionLabel } from "@/lib/connectionLabel"
 import { cn } from "@/lib/utils"
 import type { Lang, PublicSession } from "@/types/session"
@@ -32,7 +34,7 @@ export function StagePage() {
         const found = rooms.find((r) => r.id === sessionId)
         if (found) {
           setRoom(found)
-          document.title = `${found.title} · Escenario`
+          document.title = `${found.title} · Escenario · ${BRAND_NAME}`
         }
       })
       .catch(() => {})
@@ -84,6 +86,7 @@ export function StagePage() {
   return (
     <div className="relative flex h-dvh flex-col bg-background">
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-border bg-background/80 px-5 py-3 backdrop-blur">
+        <PilusoLogo showPartner className="border-r border-border pr-4" />
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{room?.title ?? sessionId}</div>
           <div className="text-sm text-muted-foreground">

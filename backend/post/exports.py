@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 MAX_LINE_CHARS = 42
 MAX_LINES = 2
 MAX_CUE_CHARS = MAX_LINE_CHARS * MAX_LINES
 MAX_CUE_S = 7.0
 MIN_CUE_S = 1.0
+# Nerdearla is in Buenos Aires (no DST); a fixed offset needs no tzdata in the slim image
+TALK_TZ = timezone(timedelta(hours=-3), "ART")
 
 
 @dataclass
@@ -119,7 +122,7 @@ def _fmt_timestamp(seconds: float, ms_sep: str) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}{ms_sep}{ms:03d}"
 
 
-def _fmt_mmss(seconds: float) -> str:
+def fmt_mmss(seconds: float) -> str:
     seconds = max(0, round(seconds))
     m, s = divmod(seconds, 60)
     return f"{m:02d}:{s:02d}"
@@ -148,7 +151,37 @@ def to_txt(events: list[dict]) -> str:
     return "\n".join(e["text"].strip() for e in events if e.get("text", "").strip()) + "\n"
 
 
-def to_md(meta: dict, events_by_lang: dict[str, list[dict]]) -> str:
+def _fmt_datetime(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, TALK_TZ).strftime("%Y-%m-%d %H:%M (%Z)")
+
+
+def group_by_lang(events: list[dict]) -> dict[str, list[dict]]:
+    events_by_lang: dict[str, list[dict]] = {}
+    for e in events:
+        events_by_lang.setdefault(e["lang"], []).append(e)
+    return events_by_lang
+
+
+def _knowledge_md(knowledge: dict) -> list[str]:
+    """Resumen + puntos clave del Knowledge Pack (T3.4) al tope del MD, para que la
+    fuente que se pega en NotebookLM ya traiga el contexto (capa 3)."""
+    lines: list[str] = []
+    for key, label in (("summary_es", "Resumen"), ("summary_en", "Summary")):
+        if knowledge.get(key):
+            lines += [f"## {label}", "", knowledge[key].strip(), ""]
+    points = knowledge.get("key_points") or []
+    if points:
+        lines += ["## Puntos clave · Key points", ""]
+        for p in points:
+            lines.append(f"- [{p.get('t', '')}] {p.get('es', '')} / {p.get('en', '')}")
+        lines.append("")
+    terms = knowledge.get("terms") or []
+    if terms:
+        lines += [f"**Términos:** {', '.join(terms)}", ""]
+    return lines
+
+
+def to_md(meta: dict, events_by_lang: dict[str, list[dict]], knowledge: dict | None = None) -> str:
     lines = [f"# {meta.get('title', 'Charla')}"]
     speaker = meta.get("speaker")
     if speaker:
@@ -158,10 +191,12 @@ def to_md(meta: dict, events_by_lang: dict[str, list[dict]]) -> str:
     if source_lang and target_lang:
         lines.append(f"**Idiomas:** {source_lang} → {target_lang}")
     if meta.get("started_at"):
-        lines.append(f"**Inicio:** {meta['started_at']}")
+        lines.append(f"**Inicio:** {_fmt_datetime(meta['started_at'])}")
     if meta.get("stopped_at"):
-        lines.append(f"**Fin:** {meta['stopped_at']}")
+        lines.append(f"**Fin:** {_fmt_datetime(meta['stopped_at'])}")
     lines.append("")
+    if knowledge:
+        lines += _knowledge_md(knowledge)
     for lang in sorted(events_by_lang):
         events = events_by_lang[lang]
         if not events:
@@ -172,6 +207,6 @@ def to_md(meta: dict, events_by_lang: dict[str, list[dict]]) -> str:
             text = e["text"].strip()
             if not text:
                 continue
-            lines.append(f"[{_fmt_mmss(e['t0'])}] {text}")
+            lines.append(f"[{fmt_mmss(e['t0'])}] {text}")
         lines.append("")
     return "\n".join(lines).rstrip("\n") + "\n"

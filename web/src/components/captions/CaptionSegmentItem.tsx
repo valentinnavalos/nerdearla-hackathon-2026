@@ -42,7 +42,7 @@ export function CaptionSegmentItem({ segment, isLast, overlay }: CaptionSegmentI
         settled && "animate-caption-settle",
         overlay &&
           "max-w-[80ch] text-white [text-shadow:-2px_-2px_0_#000,2px_-2px_0_#000,-2px_2px_0_#000,2px_2px_0_#000]",
-        overlay && !segment.final && "text-neutral-200",
+        overlay && !segment.final && "text-primary",
       )}
     >
       {segment.text}

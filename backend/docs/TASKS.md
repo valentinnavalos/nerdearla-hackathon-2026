@@ -50,12 +50,12 @@
 | T3.1 | Modo overlay para OBS/vMix | B | 35 min | P1 | 3 | ✅ |
 | T3.2 | Panel de monitoreo | B | 1 h | P1 | 3 | ✅ |
 | T3.3 | Exports SRT / VTT / TXT / MD | A | 45 min | P1 | 3 | ✅ |
-| T3.4 | Knowledge Pack (generación) | A | 50 min | P1 | 3 | |
-| T3.5 | Página de la charla (post-talk) | B | 1.2 h | P1 | 3 | |
-| T3.6 | "Preguntale a la charla" | A | 30 min | P1 | 3 | |
+| T3.4 | Knowledge Pack (generación) | A | 50 min | P1 | 3 | ✅ |
+| T3.5 | Página de la charla (post-talk) | B | 1.2 h | P1 | 3 | ✅ |
+| T3.6 | "Preguntale a la charla" | A | 30 min | P1 | 3 | ✅ |
 | T3.7 | Pasada final de calidad con glosario | A | 30 min | P2 | 3 | |
 | T3.8 | Audio traducido (solo Camino 1) | A | 1.5 h | P2 | 3 | |
-| T3.9 | Exporter automático a NotebookLM | A | 1.5 h (timebox) | P2 | 3 | |
+| T3.9 | Exporter automático a NotebookLM | A | 1.5 h (timebox) | P2 | 3 | ✅ |
 | T3.10 | `docker-compose.yml` + túnel opcional | A | 20 min | P1 | 3 | |
 | T3.11 | Samples, glosario default, replay real | AB | 20 min | P0 | 3 | |
 | T3.12 | README completo | B | 1 h | P0 | 3 | ✅ |
@@ -746,6 +746,15 @@ license: mit
 
 #### T3.4 · Knowledge Pack — A · 50 min · P1 · depende de T2.3
 
+**Estado:** ✅ Completo.
+- `backend/post/pipeline.py` `run_post()` corre en segundo plano. `SessionManager` lo agenda con `Session.on_done` solo si la sala terminó en STOPPED, tanto con Stop manual como con fin natural del archivo. Nunca en ERROR ni al apagar el proceso.
+- `backend/post/knowledge.py` `generate()` hace una llamada a `KP_MODEL` con `response_schema`, descarta preguntas mal formadas y reintenta una vez ante 429/503.
+- `kp_status` y `notebooklm_url` se persisten en `meta.json`; un `pending` recargado tras un restart pasa a `error`.
+- Por debajo de 60 palabras no se genera: con una sola frase el modelo inventaba herramientas a partir del título. El prompt también exige usar solo lo que se dijo.
+- `POST /api/sessions/{id}/knowledge/regenerate` (admin) lo vuelve a correr.
+- Validado con Gemini real: una sala `replay` parada tuvo `knowledge.json` en ~8 s.
+- Tests en `tests/test_knowledge.py`.
+
 **Funcional:** la charla se convierte sola en resumen, puntos clave y quiz.
 
 **Técnico (`post/knowledge.py`):**
@@ -762,6 +771,12 @@ license: mit
 
 #### T3.5 · Página de la charla — B · 1.2 h · P1 · depende de T3.3, T3.4
 
+**Estado:** ✅ Completo.
+- `/talk/:id` (`web/src/pages/TalkPage.tsx` + `web/src/components/talk/`) muestra resumen y puntos clave ES/EN, quiz con puntaje, "Preguntale a la charla", NotebookLM y descargas. Mientras está `pending` hace polling cada 5 s.
+- "Copiar para NotebookLM" precarga el MD (el export `md` ahora antepone resumen y puntos clave si hay Knowledge Pack), lo copia al portapapeles y abre NotebookLM. Si no puede copiar, lo descarga.
+- La vista de audiencia muestra "Ver resumen →" al terminar. La consola admin tiene un link al resumen y el botón "Generar/Regenerar resumen".
+- Probado con Playwright en 390 px: sin scroll horizontal, ask responde con minuto citado y el portapapeles recibe el MD.
+
 **Funcional:** después de la charla, el mismo QR lleva al resumen, quiz, descargas y preguntas.
 
 **Técnico (`talk.html?s=ID`):**
@@ -777,6 +792,11 @@ license: mit
 **Listo cuando:** flujo completo desde el celular: subtítulos → stop → resumen y quiz.
 
 #### T3.6 · "Preguntale a la charla" — A · 30 min · P1 · depende de T3.4
+
+**Estado:** ✅ Completo.
+- `POST /api/sessions/{id}/ask` en `backend/api/sessions.py`, con rate limit por ventana deslizante y cache LRU en `backend/api/ratelimit.py`. La IP sale de la última entrada de `X-Forwarded-For`, que es la que agrega el proxy de Render.
+- El 429/503 de Gemini se traduce a 429 "Mucha demanda, probá en un minuto"; el límite propio da 429 "Llegaste al límite de preguntas…".
+- Tests en `tests/test_admin_api.py`: validación, cache, la sexta pregunta devuelve 429, mapeo del 429 de Gemini.
 
 **Técnico:**
 - `POST /api/sessions/{id}/ask` body `{q}` (máximo 300 caracteres).
@@ -805,6 +825,14 @@ license: mit
 **Listo cuando:** en el celular se escucha la traducción con retraso estable.
 
 #### T3.9 · Exporter automático a NotebookLM (P2, timebox 1.5 h) — A
+
+**Estado:** ✅ Implementado como **opcional para quien despliegue**. Decisión: el proyecto no usa ninguna cuenta propia; el deploy por defecto no necesita cuenta y usa la capa 3.
+- `backend/post/notebooklm.py` usa `notebooklm-py` 0.8, con la API verificada contra la librería instalada: `notebooks.create`, `sources.add_text(..., wait=True)`, `sharing.set_public` → `share_url`, `artifacts.generate_audio` + `wait_for_completion`.
+- Import perezoso, dependencia opcional en `requirements-notebooklm.txt`. El pipeline lo llama solo con `NOTEBOOKLM_ENABLED=1` y solo loguea errores.
+- Prueba manual: `python -m scripts.notebooklm_export <id>` (en `scripts/`, no `tools/`).
+- Cambio respecto al plan: en la nube no hace falta `NOTEBOOKLM_STORAGE_JSON`, porque la librería ya lee el storage state inline de `NOTEBOOKLM_AUTH_JSON`.
+- Build opcional con `WITH_NOTEBOOKLM=1` en el `Dockerfile`. El README explica la activación paso a paso y por qué conviene una cuenta Google dedicada.
+- No se probó contra NotebookLM real, porque requiere una cuenta. Queda a cargo de quien lo active, con `python -m scripts.notebooklm_export`.
 
 **Funcional:** al terminar la charla, se crea sola un notebook con la transcripción y un podcast.
 

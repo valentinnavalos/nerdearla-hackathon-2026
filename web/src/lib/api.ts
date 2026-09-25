@@ -1,7 +1,9 @@
 import type {
   AdminSessionsResponse,
+  AskResponse,
   CreateSessionPayload,
   ExportFormat,
+  KnowledgeResponse,
   Lang,
   PublicSession,
   Session,
@@ -15,6 +17,12 @@ export class ApiError extends Error {
     super(`${status} ${statusText}`)
     this.status = status
     this.body = body
+  }
+
+  /** FastAPI's `{"detail": "..."}` message, when the backend sent one. */
+  get detail(): string | null {
+    const detail = (this.body as { detail?: unknown } | null)?.detail
+    return typeof detail === "string" ? detail : null
   }
 }
 
@@ -83,6 +91,25 @@ export function uploadFile(token: string, file: File): Promise<{ file: string }>
 export function getExportUrl(id: string, fmt: ExportFormat, lang: Lang = "es"): string {
   const params = fmt === "md" ? "" : `?lang=${encodeURIComponent(lang)}`
   return `/api/sessions/${encodeURIComponent(id)}/export.${fmt}${params}`
+}
+
+export function getKnowledge(id: string): Promise<KnowledgeResponse> {
+  return request(`/api/sessions/${encodeURIComponent(id)}/knowledge`)
+}
+
+export function regenerateKnowledge(token: string, id: string): Promise<Session> {
+  return request(`/api/sessions/${encodeURIComponent(id)}/knowledge/regenerate`, {
+    method: "POST",
+    headers: authHeaders(token),
+  })
+}
+
+export function askTalk(id: string, q: string): Promise<AskResponse> {
+  return request(`/api/sessions/${encodeURIComponent(id)}/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ q }),
+  })
 }
 
 export function getNetworkInfo(): Promise<{ lan_ip: string | null }> {

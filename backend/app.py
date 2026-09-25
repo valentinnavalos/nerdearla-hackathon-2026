@@ -10,8 +10,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.api import sessions, ws
+from backend.api.ratelimit import LRUCache, RateLimiter
 from backend.config import Settings, configure_logging, get_settings
-from backend.core.manager import CapacityError, SessionManager, SessionNotFound
+from backend.core.manager import CapacityError, ConflictError, SessionManager, SessionNotFound
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -38,6 +39,8 @@ async def lifespan(app: FastAPI):
     configure_logging(settings.log_level)
     app.state.settings = settings
     app.state.manager = SessionManager(settings)
+    app.state.ask_limiter = RateLimiter(settings.ask_rate_limit, settings.ask_rate_window_s)
+    app.state.ask_cache = LRUCache()
     try:
         app.state.manager.reload()
     except Exception as e:  # a bad meta.json must never stop the app from starting
@@ -47,7 +50,7 @@ async def lifespan(app: FastAPI):
     await app.state.manager.stop_all()
 
 
-app = FastAPI(title="Nerdearla Live Captions", lifespan=lifespan)
+app = FastAPI(title="Piluso Live Captions", lifespan=lifespan)
 app.include_router(sessions.router)
 app.include_router(ws.router)
 
@@ -59,6 +62,11 @@ async def _not_found(request: Request, exc: SessionNotFound) -> JSONResponse:
 
 @app.exception_handler(CapacityError)
 async def _capacity(request: Request, exc: CapacityError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(ConflictError)
+async def _conflict(request: Request, exc: ConflictError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 

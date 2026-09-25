@@ -1,10 +1,10 @@
-# Nerdearla Live Captions
+# Piluso Live Captions
 
 Subtítulos y traducción EN ↔ ES en vivo para conferencias, con Gemini Live (free tier, costo cero). Una sala = una sesión Live que devuelve el original y la traducción; la audiencia elige sala e idioma desde el celular, con overlay listo para OBS/vMix y descargas de la transcripción al terminar.
 
 *(Captura o GIF pendiente — ver [T3.12](backend/docs/TASKS.md).)*
 
-Estado: motor Camino 1 (`live_translate`) en producción, sesiones con pub/sub por idioma, WS de subtítulos, vista de escenario con QR, panel de operador con monitoreo y exports, overlay para switchers y deploy en Render (Docker). Knowledge Pack, página post-charla y exporter a NotebookLM todavía no están implementados (ver "Después de la charla" y [`backend/docs/TASKS.md`](backend/docs/TASKS.md)). Plan y decisiones de arquitectura: [`backend/docs/PLAN.md`](backend/docs/PLAN.md).
+Estado: motor Camino 1 (`live_translate`) en producción, sesiones con pub/sub por idioma, WS de subtítulos, vista de escenario con QR, panel de operador con monitoreo y exports, overlay para switchers, página post-charla con Knowledge Pack (resumen, puntos clave, quiz), "Preguntale a la charla" y botón "Copiar para NotebookLM", y deploy en Render (Docker). El exporter automático a NotebookLM (notebook + podcast) es opcional: viene apagado y no requiere ninguna cuenta para desplegar (ver "Después de la charla" y [`backend/docs/TASKS.md`](backend/docs/TASKS.md)). Plan y decisiones de arquitectura: [`backend/docs/PLAN.md`](backend/docs/PLAN.md).
 
 **Demo en vivo:** `https://<TU-SERVICIO>.onrender.com` — reemplazar por la URL real del servicio de Render antes de compartir (el free tier de Render duerme el servicio sin tráfico: la primera carga puede tardar ~30-50s en levantar).
 
@@ -157,8 +157,9 @@ flowchart TD
   A5 --> C1["Exports<br/>SRT · VTT · TXT · MD"]
   B3 --> C2{"¿Charla terminada?"}
   C2 -->|No| B3
-  C2 -->|Sí| C3["/talk/:id<br/>Próximamente:<br/>Knowledge Pack y quiz"]
+  C2 -->|Sí| C3["/talk/:id<br/>Resumen · quiz · preguntas"]
   C1 --> C3
+  C3 --> C4["NotebookLM<br/>copiar o abrir notebook"]
 ```
 
 Diagrama completo y alternativas evaluadas: [`backend/docs/PLAN.md` §2.4](backend/docs/PLAN.md#24-flujo-de-datos) y [`backend/docs/DIAGRAMS.md`](backend/docs/DIAGRAMS.md) (versión extendida, 11 diagramas).
@@ -197,7 +198,12 @@ El proyecto corre como un **Docker Web Service** en [Render](https://render.com)
 | `MAX_CONCURRENT_LIVE` | `4` | Tope de sesiones Live abiertas en el proceso (medido y validado sin degradación hasta 2 simultáneas, ver [Mediciones](#mediciones-t14)) |
 | `ROTATE_AFTER_S` | `540` | Rotación preventiva (9 min) |
 | `QUOTA_LIVE_SESSIONS_PER_DAY` | `0` | Cupo diario (0 = no mostrar) |
-| `NOTEBOOKLM_ENABLED` | `0` | Exporter no oficial (P2) |
+| `NOTEBOOKLM_ENABLED` | `0` | Exporter automático no oficial (T3.9), opcional; requiere `WITH_NOTEBOOKLM=1` en el build |
+| `WITH_NOTEBOOKLM` | `0` | Build arg: `1` instala `requirements-notebooklm.txt` en la imagen |
+| `NOTEBOOKLM_AUTH_JSON` | — | Contenido de `storage_state.json` de `notebooklm login` con una **cuenta dedicada** (secret, lo lee la librería) |
+| `NOTEBOOKLM_STORAGE_PATH` | — | Alternativa local: ruta a `storage_state.json` (vacío = perfil default) |
+| `NOTEBOOKLM_AUDIO` · `NOTEBOOKLM_AUDIO_LANG` | `1` · `es` | Generar el podcast (Audio Overview) y en qué idioma |
+| `ASK_RATE_LIMIT` · `ASK_RATE_WINDOW_S` | `5` · `600` | Preguntas por IP por ventana en "Preguntale a la charla" |
 | `LOG_LEVEL` | `INFO` | |
 | `SEGMENT_IDLE_S` | `2.0` | Segundos sin fragmentos que cierran un segmento (provisorio, ver Mediciones) |
 | `GEMINI_MODEL` · `CHUNK_SECONDS` · `OVERLAP_SECONDS` | `gemini-2.5-flash` · `5` · `0.75` | Fallback A (`ENGINE=chunked`) |
@@ -252,9 +258,38 @@ GET /api/sessions/{id}/export.{srt,vtt,txt,md}?lang={en,es}
 
 `md` incluye ambos idiomas en un solo documento; los demás formatos requieren `lang`. Es un endpoint público (sin token), pensado para compartir el link después de la charla.
 
-**Knowledge Pack y "Preguntale a la charla" (pendiente, roadmap):** resumen + quiz generado con `gemini-*-flash-lite` sobre la transcripción, y un endpoint de preguntas sobre el contenido de la charla. Especificado en `backend/docs/TASKS.md` (T3.4, T3.6) pero todavía no implementado.
+**Knowledge Pack (listo, T3.4):** al parar una sala (o cuando el archivo termina), un pipeline en segundo plano hace una llamada a `KP_MODEL` con la transcripción entera y guarda `knowledge.json` junto a `meta.json`: resumen ES/EN, 5–8 puntos clave con su `[mm:ss]`, términos y un quiz de 5 preguntas. Nunca bloquea el Stop; el estado queda en `kp_status` (`pending → ready | error`). Ante un 429/503 de Gemini reintenta una vez a los 60 s. Si la transcripción tiene menos de 60 palabras no se genera (el modelo empieza a inventar). Desde la consola, "Generar/Regenerar resumen" lo vuelve a correr (útil en Render, que pierde `data/` al dormir).
 
-**Página de la charla y NotebookLM (pendiente, roadmap):** una página post-charla (`talk.html`) que reúna resumen, quiz, descargas y preguntas (T3.5), más un exporter no oficial a NotebookLM (`NOTEBOOKLM_ENABLED`, T3.9) — ambos sin implementar todavía.
+**Página de la charla (listo, T3.5):** `/talk/:id` (el link "Ver resumen →" aparece en la vista de audiencia al terminar) muestra resumen y puntos clave con selector ES/EN, quiz interactivo, "Preguntale a la charla", NotebookLM y descargas. Mientras el resumen se genera hace polling cada 5 s.
+
+**"Preguntale a la charla" (listo, T3.6):** `POST /api/sessions/{id}/ask` con `{"q": "..."}` (máx. 300 caracteres). Responde solo con la transcripción, en el idioma de la pregunta y citando `[mm:ss]`. Límite de 5 preguntas cada 10 min por IP (en memoria) y cache por pregunta normalizada; las respuestas cacheadas no consumen límite.
+
+**NotebookLM, capa 3 (listo):** el botón "Copiar para NotebookLM" copia el MD (con el resumen arriba de la transcripción) y abre NotebookLM para pegarlo como fuente. Si el navegador no deja copiar, descarga el `.md`. NotebookLM no tiene API pública para cuentas personales, por eso este es el camino por defecto.
+
+**NotebookLM, capa 2: notebook + podcast automáticos (opcional, apagado por defecto; T3.9).** El proyecto **no necesita ninguna cuenta Google** para funcionar: sin configurar nada, el deploy usa la capa 3. Quien despliegue su propia instancia puede activar además que, al parar cada sala, se cree solo un notebook "Nerdearla 2026 — <título>" con el MD como fuente, se intente hacer público y se genere el podcast. El link queda en `meta.json` (`notebooklm_url`) y la página muestra "Abrir notebook con podcast".
+
+Usa [`notebooklm-py`](https://github.com/teng-lin/notebooklm-py), una librería **no oficial** (NotebookLM no tiene API pública para cuentas personales) que puede romperse en cualquier momento. Cualquier error solo se loguea: la charla, los exports y el Knowledge Pack no se ven afectados.
+
+> ⚠️ **Usá una cuenta Google dedicada, nunca la personal.** La sesión que guarda `notebooklm login` son las cookies de **toda** la cuenta (Gmail, Drive, etc.), no un permiso limitado a NotebookLM. Si va como secret en la nube, cualquiera con acceso al panel o a una filtración tiene esa cuenta. Además, los notebooks públicos muestran al dueño, y la automatización no oficial puede hacer que Google marque la cuenta.
+
+Cómo activarlo:
+
+1. Crear una cuenta Google nueva solo para esto.
+2. En local, iniciar sesión con esa cuenta y probar con una sala ya terminada:
+   ```bash
+   pip install -r requirements-notebooklm.txt "notebooklm-py[browser]"
+   notebooklm login                                    # abre el navegador: entrar con la cuenta dedicada
+   python -m scripts.notebooklm_export <session_id>    # --no-audio: más rápido; --save: guarda el link en meta.json
+   ```
+3. En Render, agregar las variables de entorno:
+   - `WITH_NOTEBOOKLM=1`: instala la librería en el build.
+   - `NOTEBOOKLM_ENABLED=1`.
+   - `NOTEBOOKLM_AUTH_JSON`: el contenido de `~/.notebooklm/profiles/default/storage_state.json`, como secret.
+   
+   Con Docker a mano: `docker build --build-arg WITH_NOTEBOOKLM=1 .`.
+4. Si la sesión vence (Google rota las cookies), repetir `notebooklm login` y actualizar el secret.
+
+Alternativa sin cookies en la nube: dejar Render sin configurar y correr el paso 2 a mano después de cada charla.
 
 ## Self-host
 
@@ -337,4 +372,4 @@ En el free tier, Google usa el contenido enviado para mejorar sus productos. Par
 
 ## Licencia y créditos
 
-MIT. Hecho para Nerdearla, con Gemini Live (Google AI Studio) como motor de transcripción y traducción.
+MIT. Piluso Live Captions, hecho para Nerdearla, con Gemini Live (Google AI Studio) como motor de transcripción y traducción.

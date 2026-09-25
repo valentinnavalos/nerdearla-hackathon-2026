@@ -26,7 +26,12 @@ class Settings(BaseSettings):
     max_concurrent_live: int = 4
     rotate_after_s: int = 540
     quota_live_sessions_per_day: int = 0
-    notebooklm_enabled: bool = False
+    notebooklm_enabled: bool = False  # T3.9, unofficial notebooklm-py (auth: NOTEBOOKLM_AUTH_JSON)
+    notebooklm_storage_path: str = ""  # storage_state.json; empty = the library's default profile
+    notebooklm_audio: bool = True  # also generate the Audio Overview (podcast)
+    notebooklm_audio_lang: str = "es"
+    ask_rate_limit: int = 5  # "Preguntale a la charla" (T3.6): questions per IP...
+    ask_rate_window_s: int = 600  # ...per this window
     log_level: str = "INFO"
     segment_idle_s: float = 2.0  # provisional, see README "Mediciones (T1.4)"
 

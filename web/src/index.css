@@ -11,8 +11,8 @@
   --card-foreground: #f5f5f7;
   --popover: #17171b;
   --popover-foreground: #f5f5f7;
-  --primary: #e63946;
-  --primary-foreground: #ffffff;
+  --primary: #ffc53d;
+  --primary-foreground: #1a1405;
   --secondary: #212126;
   --secondary-foreground: #f5f5f7;
   --muted: #212126;
@@ -22,7 +22,7 @@
   --destructive: #f4574a;
   --border: #2c2c33;
   --input: #2c2c33;
-  --ring: #e63946;
+  --ring: #ffc53d;
   --caption-size: 2.2rem;
 }
 
@@ -52,6 +52,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-display: "Space Grotesk Variable", system-ui, sans-serif;
 }
 
 * {
@@ -70,6 +71,14 @@ body {
   color-scheme: dark;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   margin: 0;
+}
+
+/* Brand typeface for headings only; captions and body text stay on system-ui. */
+@layer base {
+  h1,
+  h2 {
+    font-family: var(--font-display);
+  }
 }
 
 @keyframes caption-settle {

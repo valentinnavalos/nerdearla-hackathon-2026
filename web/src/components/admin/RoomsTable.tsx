@@ -4,9 +4,11 @@ import { OverlayConfigDialog } from "@/components/admin/OverlayConfigDialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { deleteSession, startSession, stopSession } from "@/lib/api"
+import { deleteSession, regenerateKnowledge, startSession, stopSession } from "@/lib/api"
 import { STATUS_LABELS, statusBadgeVariant } from "@/lib/constants"
 import type { Session } from "@/types/session"
+
+const KP_LABELS = { pending: "generando", ready: "listo", error: "error" } as const
 
 interface RoomsTableProps {
   token: string
@@ -15,11 +17,14 @@ interface RoomsTableProps {
 }
 
 export function RoomsTable({ token, rooms, onChanged }: RoomsTableProps) {
-  async function act(action: "start" | "stop" | "delete", id: string) {
+  async function act(action: "start" | "stop" | "delete" | "regenerate", id: string) {
     try {
       if (action === "start") await startSession(token, id)
       else if (action === "stop") await stopSession(token, id)
-      else {
+      else if (action === "regenerate") {
+        await regenerateKnowledge(token, id)
+        toast.success("Generando el resumen de la charla…")
+      } else {
         if (!confirm("¿Borrar esta sala?")) return
         await deleteSession(token, id)
       }
@@ -78,6 +83,16 @@ export function RoomsTable({ token, rooms, onChanged }: RoomsTableProps) {
                   </Button>
                   <OverlayConfigDialog id={room.id} />
                   <ExportMenu id={room.id} status={room.status} />
+                  <Button size="sm" variant="outline" asChild>
+                    <a href={`/talk/${room.id}`} target="_blank" rel="noreferrer">
+                      Resumen{room.kp_status ? ` (${KP_LABELS[room.kp_status]})` : ""}
+                    </a>
+                  </Button>
+                  {room.status === "STOPPED" && room.kp_status !== "pending" && (
+                    <Button size="sm" variant="ghost" onClick={() => act("regenerate", room.id)}>
+                      {room.kp_status ? "Regenerar resumen" : "Generar resumen"}
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
