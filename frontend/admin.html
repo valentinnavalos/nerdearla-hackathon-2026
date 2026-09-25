@@ -184,6 +184,25 @@ async function refreshRooms() {
 function roomRow(room) {
   const token = admin.getToken();
   const listeners = Object.values(room.metrics?.listeners ?? {}).reduce((a, b) => a + b, 0);
+  const exportFmt = el(
+    "select",
+    { class: "export-fmt" },
+    el("option", { value: "srt" }, "SRT"),
+    el("option", { value: "vtt" }, "VTT"),
+    el("option", { value: "txt" }, "TXT"),
+    el("option", { value: "md" }, "MD (ambos idiomas)"),
+  );
+  const exportLang = el(
+    "select",
+    { class: "export-lang" },
+    el("option", { value: "es" }, "ES"),
+    el("option", { value: "en" }, "EN"),
+  );
+  function syncExportLang() {
+    exportLang.disabled = exportFmt.value === "md";
+  }
+  exportFmt.addEventListener("change", syncExportLang);
+  syncExportLang();
   const actions = el(
     "div",
     { class: "row-actions" },
@@ -193,6 +212,9 @@ function roomRow(room) {
     el("button", { type: "button", class: "btn", dataset: { action: "delete", id: room.id } }, "Borrar"),
     el("a", { class: "btn", href: `stage.html?s=${encodeURIComponent(room.id)}&token=${encodeURIComponent(token)}`, target: "_blank" }, "Escenario"),
     el("a", { class: "btn", href: `/?s=${encodeURIComponent(room.id)}`, target: "_blank" }, "Audiencia"),
+    exportFmt,
+    exportLang,
+    el("button", { type: "button", class: "btn", dataset: { action: "export", id: room.id } }, "Exportar"),
   );
   const row = el(
     "tr",
@@ -216,6 +238,12 @@ document.getElementById("rooms-body").addEventListener("click", async (e) => {
     else if (action === "delete") {
       if (!confirm("¿Borrar esta sala?")) return;
       await admin.deleteSession(id);
+    } else if (action === "export") {
+      const row = btn.closest("tr");
+      const fmt = row.querySelector(".export-fmt").value;
+      const lang = row.querySelector(".export-lang").value;
+      window.open(`/api/sessions/${encodeURIComponent(id)}/export.${fmt}?lang=${lang}`, "_blank");
+      return;
     }
     await refreshRooms();
   } catch (err) {

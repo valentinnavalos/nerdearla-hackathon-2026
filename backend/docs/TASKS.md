@@ -58,7 +58,7 @@
 | T3.9 | Exporter automático a NotebookLM | A | 1.5 h (timebox) | P2 | 3 | |
 | T3.10 | `docker-compose.yml` + túnel opcional | A | 20 min | P1 | 3 | |
 | T3.11 | Samples, glosario default, replay real | AB | 20 min | P0 | 3 | |
-| T3.12 | README completo | B | 1 h | P0 | 3 | |
+| T3.12 | README completo | B | 1 h | P0 | 3 | ✅ |
 | T4.1 | E2E desde cero (otra conferencia) | AB | 30 min | P0 | 4 | |
 | T4.2 | Hardening y caminos de error | AB | 25 min | P0 | 4 | |
 | T4.3 | Code freeze + tag | AB | 5 min | P0 | 4 | |
@@ -854,6 +854,8 @@ license: mit
 12. Licencia MIT y créditos.
 
 **Listo cuando:** alguien que no conoce el proyecto puede deployarlo solo con el README (se valida en T4.1).
+
+**Estado:** ✅ Completo — `README.md` reescrito con las 12 secciones en orden. Knowledge Pack, página de la charla y NotebookLM se marcan explícitamente como pendientes (T3.4/T3.5/T3.9) en vez de prometerse; `docker-compose.yml` dedicado (T3.10) sigue sin existir, así que "Self-host" documenta el único container actual (`make docker-run`) + túnel Cloudflare. Falta la captura/GIF de la sección 1 (queda como placeholder).
 
 ---
 

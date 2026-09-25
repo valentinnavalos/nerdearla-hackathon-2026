@@ -9,9 +9,18 @@ license: mit
 
 # Nerdearla Live Captions
 
-Subtítulos y traducción EN ↔ ES en vivo para conferencias, con Gemini Live (free tier, costo cero). Una sala = una sesión Live que devuelve el original y la traducción; la audiencia elige sala e idioma desde el celular.
+Subtítulos y traducción EN ↔ ES en vivo para conferencias, con Gemini Live (free tier, costo cero). Una sala = una sesión Live que devuelve el original y la traducción; la audiencia elige sala e idioma desde el celular, con overlay listo para OBS/vMix y descargas de la transcripción al terminar.
 
-Estado: **Fase 1** — motor Camino 1 (`live_translate`), sesiones con pub/sub por idioma, WS de subtítulos, página de audiencia, modo replay y Dockerfile para HF Spaces. Plan y backlog: [`backend/docs/PLAN.md`](backend/docs/PLAN.md) · [`backend/docs/TASKS.md`](backend/docs/TASKS.md).
+*(Captura o GIF pendiente — ver [T3.12](backend/docs/TASKS.md).)*
+
+Estado: motor Camino 1 (`live_translate`) en producción, sesiones con pub/sub por idioma, WS de subtítulos, vista de escenario con QR, panel de operador con monitoreo y exports, overlay para switchers y Dockerfile para HF Spaces. Knowledge Pack, página post-charla y exporter a NotebookLM todavía no están implementados (ver "Después de la charla" y [`backend/docs/TASKS.md`](backend/docs/TASKS.md)). Plan y decisiones de arquitectura: [`backend/docs/PLAN.md`](backend/docs/PLAN.md).
+
+## Probalo en 3 minutos
+
+1. En Hugging Face, abrí el Space y click en **"Duplicate this Space"** (deploy propio en 2 clics, sin tocar código).
+2. En tu copia, **Settings → Secrets**: cargá `GEMINI_API_KEY` (ver [cómo conseguir una sin billing](#cómo-crear-la-api-key-sin-billing)) y `ADMIN_TOKEN` (cualquier string, protege la consola).
+3. Abrí `https://TU-SPACE.hf.space/admin.html`, entrá con el `ADMIN_TOKEN` y creá una sala con fuente **Archivo (samples/)** apuntando a `samples/en_talk_3min.mp3`, arrancala.
+4. Abrí la vista de audiencia (`https://TU-SPACE.hf.space/?s=ID`) o el QR que muestra `stage.html` — los subtítulos en vivo aparecen enseguida.
 
 ## Correr en local
 
@@ -49,6 +58,33 @@ python -m scripts.runner_probe samples/mp3/a.mp3:en samples/es_talk_2min.mp3:es 
 
 En Docker: `docker run --rm --env-file .env nerdearla-captions python -m backend.main_cli samples/en_talk_3min.mp3 --lang en`.
 
+## Arquitectura
+
+Cada sala corre su propia tubería (una `asyncio.Task`), aislada del resto: si una falla no afecta a las demás. Todas comparten un único proceso FastAPI dentro de un Space (2 vCPU / 16 GB gratis).
+
+```
+Mini PC (browser, HTTPS)                 HF Space (Docker gratis)
+┌─────────────────────┐   WS audio PCM   ┌──────────────────────────────────────┐
+│ Vista escenario:    │ ───────────────► │ Stage worker (1 task por sala)       │
+│ captura placa audio │                  │  ├─ LiveSessionRunner ◄─WS─► Gemini  │
+│ + subtítulos + QR   │ ◄── captions ─── │  │   (rotación ~9 min, ring buffer)  │
+└─────────────────────┘                  │  ├─ Glosario (post-proceso)         │
+ FileSource (mp3) ─────────────────────► │  └─ captions.jsonl                  │
+Celulares (QR) / Overlay OBS ◄── WS ──── │ SessionManager: pub/sub, métricas    │
+Panel de monitoreo ◄── WS ────────────── │ Al stop: exports SRT/VTT/TXT/MD      │
+                                          └──────────────────────────────────────┘
+```
+
+Diagrama completo y alternativas evaluadas: [`backend/docs/PLAN.md` §2.4](backend/docs/PLAN.md#24-flujo-de-datos).
+
+**Decisión de caminos:** el proyecto usa el **Camino 1** (`ENGINE=live_translate`), el modelo `gemini-*-live-translate-preview` que transcribe y traduce en la misma llamada. El **Camino 2** (`transcribe_mt`: transcripción + traducción local con Argos) está en el código como fallback pero **no está implementado/probado** — ver `PLAN.md §2.1` para por qué se descartó como default (el free tier no sostiene el costo de dos modelos por sala).
+
+## Cómo crear la API key sin billing
+
+1. En [Google AI Studio](https://aistudio.google.com/), creá un **proyecto nuevo** (no reutilices uno que ya tenga billing habilitado).
+2. Generá la API key desde ese proyecto y verificá en **AI Studio → Projects** que figure como **Free**.
+3. Para chequear cuotas y límites de sesiones concurrentes: **AI Studio → Rate limits** (RPM, TPM, RPD y sesiones Live simultáneas). Google no publica el cupo real de sesiones Live por adelantado — medilo con `scripts/live_probe.py` (ver [Mediciones](#mediciones-t14)) antes de un evento grande.
+
 ## Deploy en Hugging Face Spaces
 
 1. Crear un Space: SDK **Docker**, hardware **CPU basic** (gratis).
@@ -83,6 +119,67 @@ En Docker: `docker run --rm --env-file .env nerdearla-captions python -m backend
 | `DEMO_LANG` | `en` | Idioma de la charla de `DEMO_FILE` |
 | `DEMO_LOOP` | `0` | `1` = repetir `DEMO_FILE` (gasta cuota sin parar) |
 
+## Operación en un evento
+
+**Mic:** en la notebook que corre `stage.html`, conectá la placa/consola de audio como dispositivo de entrada de Chrome (o el mic de sala vía cable a la placa) y elegilo al crear la sala con fuente **Micrófono**. La captura usa `getUserMedia` con `echoCancellation`, `noiseSuppression` y `autoGainControl` en `false`: esos filtros degradan una señal que ya viene limpia de consola.
+
+**Vista de escenario (`stage.html?s=ID&token=...`):** pantalla para mostrar frente al público — medidor de nivel de audio, estado de conexión, badge de latencia, subtítulos en pantalla completa y un **QR** (esquina inferior, generado client-side con `qrcode.js`) que apunta a `/?s=ID&lang=es` para que la audiencia lo escanee desde el celular.
+
+**Panel de monitoreo (`/admin.html`):** entrando con el `ADMIN_TOKEN`, la consola de operador muestra la tabla de salas (crear/arrancar/parar/borrar, links a Escenario y Audiencia, y el selector de exports por sala — ver "Después de la charla") y un panel en vivo por WebSocket con uptime, estado del mic, silencio, latencia p50/p95, rotaciones/reconexiones/errores y oyentes conectados por sala.
+
+**Overlay para OBS/vMix (T3.1):** `index.html` acepta parámetros extra para usarse como fuente de navegador en un switcher, quemando los subtítulos traducidos sobre el video en vivo:
+
+```
+https://TU-SPACE.hf.space/?s=ID&lang=es&overlay=1&bg=transparent&size=L&lines=2
+```
+
+| Parámetro | Valores | Qué hace |
+|---|---|---|
+| `overlay=1` | — | Oculta la barra superior y deja solo el texto sobre fondo transparente/chroma |
+| `bg` | `transparent` (default) · `green` | Fondo transparente o verde puro (`#00ff00`) para chroma key |
+| `size` | `L` | Usa el tamaño de letra más grande disponible |
+| `lines` | número (default `3`) | Cuántas líneas de subtítulo mostrar a la vez |
+
+El texto se muestra en blanco con contorno negro (4 direcciones) para leerse sobre cualquier fondo de video.
+
+- **OBS Studio:** agregar una fuente **Browser Source**, 1920×1080, con esa URL (tildar "Shutdown source when not visible" apagado para no perder la conexión del WS al cambiar de escena). Con `bg=transparent` la fuente ya sale sin fondo, sin necesidad de chroma key.
+- **vMix:** agregar una entrada **Web Browser** con la misma URL y el tamaño de la escena (1920×1080); si vMix no soporta transparencia real en esa entrada, usar `bg=green` y aplicarle un filtro de chroma key verde.
+
+## Después de la charla
+
+**Exports (listo):** desde `/admin.html`, cada sala tiene en la tabla un selector de formato (SRT, VTT, TXT, MD) y de idioma, con un botón "Exportar" que descarga la transcripción. Sin UI, el mismo endpoint sirve directo:
+
+```
+GET /api/sessions/{id}/export.{srt,vtt,txt,md}?lang={en,es}
+```
+
+`md` incluye ambos idiomas en un solo documento; los demás formatos requieren `lang`. Es un endpoint público (sin token), pensado para compartir el link después de la charla.
+
+**Knowledge Pack y "Preguntale a la charla" (pendiente, roadmap):** resumen + quiz generado con `gemini-*-flash-lite` sobre la transcripción, y un endpoint de preguntas sobre el contenido de la charla. Especificado en `backend/docs/TASKS.md` (T3.4, T3.6) pero todavía no implementado.
+
+**Página de la charla y NotebookLM (pendiente, roadmap):** una página post-charla (`talk.html`) que reúna resumen, quiz, descargas y preguntas (T3.5), más un exporter no oficial a NotebookLM (`NOTEBOOKLM_ENABLED`, T3.9) — ambos sin implementar todavía.
+
+## Self-host
+
+Sin depender de Hugging Face, en tu propia máquina/mini PC:
+
+```bash
+cp .env.example .env
+make docker-run                 # http://localhost:7860
+```
+
+y exponerlo a internet con un túnel gratuito, por ejemplo **Cloudflare Tunnel** (`cloudflared tunnel --url http://localhost:7860`) apuntando al puerto del container.
+
+Hoy el deploy es un único container Docker (sin base de datos: todo el estado vive en `data/` y en memoria del proceso); un `docker-compose.yml` dedicado para self-host está en el backlog (T3.10, pendiente) — mientras tanto, el comando de arriba alcanza para levantarlo solo.
+
+## Cómo escalar
+
+- **Un Space aguanta varias salas:** el trabajo pesado lo hace Gemini; el container solo mueve audio y texto. El techo real es el cupo de sesiones Live del proyecto de Google (no publicado — medilo en AI Studio → Rate limits y con `scripts/live_probe.py`; ver [Mediciones](#mediciones-t14)). `MAX_CONCURRENT_LIVE` hace que el `SessionManager` rechace el Start de una sala de más con un error claro, en vez de degradar todas.
+- **Más salas = más Spaces:** un Space por grupo de salas, sin estado compartido entre ellos.
+- **Key por sala:** solo suma cupo real si cada key es de un proyecto distinto (los límites son por proyecto, no por key) — revisar los términos de uso de Google antes de usar varias cuentas propias.
+- **Límites del free tier:** costo cero con varias salas en paralelo **no está garantizado** — a más concurrencia, más chance de degradación (ver Mediciones).
+- **Modo 100% local (roadmap):** reemplazar Gemini Live por Whisper + Gemma/Argos corriendo en hardware propio — no implementado, es la salida para cuando el free tier no alcanza.
+
 ## Mediciones (T1.4)
 
 Medido el 24/9/2026 con `gemini-3.5-live-translate-preview`: `samples/en_talk_3min.mp3` (EN → ES, 3 min y 10 min en loop) y `samples/es_talk_2min.mp3` (ES → EN). Herramienta: `scripts/spike_live.py` (log crudo en `data/spike/`, no se commitea). Las latencias usan un VAD por energía (−45 dBFS), así que son aproximadas.
@@ -115,34 +212,6 @@ Lectura: el proyecto **sí sostiene 2 sesiones simultáneas**; lo que degrada a 
 
 **Segmentador:** el corte por silencio pasó de 1,2 s a **2,0 s** (`SEGMENT_IDLE_S`, provisorio). Reproduciendo sin red los fragmentos reales del spike EN (cadencia normal), los cortes por silencio bajan de 4 a 1 en el original y de 10 a 8 en la traducción, con la misma cantidad de finales (34 y ~25). Los finales cortos que quedan en la traducción ("Este," o "para") vienen de sus frenazos de más de 2 s: ningún corte fijo los evita.
 
-## Modo overlay para OBS/vMix (T3.1)
-
-`index.html` acepta parámetros extra para usarse como fuente de navegador en un
-switcher, quemando los subtítulos traducidos sobre el video en vivo:
-
-```
-https://TU-SPACE.hf.space/?s=ID&lang=es&overlay=1&bg=transparent&size=L&lines=2
-```
-
-| Parámetro | Valores | Qué hace |
-|---|---|---|
-| `overlay=1` | — | Oculta la barra superior y deja solo el texto sobre fondo transparente/chroma |
-| `bg` | `transparent` (default) · `green` | Fondo transparente o verde puro (`#00ff00`) para chroma key |
-| `size` | `L` | Usa el tamaño de letra más grande disponible |
-| `lines` | número (default `3`) | Cuántas líneas de subtítulo mostrar a la vez |
-
-El texto se muestra en blanco con contorno negro (4 direcciones) para leerse
-sobre cualquier fondo de video.
-
-**OBS Studio:** agregar una fuente **Browser Source**, 1920×1080, con esa URL
-(tildar "Shutdown source when not visible" apagado para no perder la conexión
-del WS al cambiar de escena). Con `bg=transparent` la fuente ya sale sin fondo,
-sin necesidad de chroma key.
-
-**vMix:** agregar una entrada **Web Browser** con la misma URL y el tamaño de
-la escena (1920×1080); si vMix no soporta transparencia real en esa entrada,
-usar `bg=green` y aplicarle un filtro de chroma key verde.
-
 ## Muestras
 
 | Archivo | Contenido |
@@ -157,6 +226,6 @@ Los originales van en `samples/mp3/` (ignorado por git).
 
 En el free tier, Google usa el contenido enviado para mejorar sus productos. Para charlas públicas es aceptable, pero hay que saberlo.
 
-## Licencia
+## Licencia y créditos
 
-MIT
+MIT. Hecho para Nerdearla, con Gemini Live (Google AI Studio) como motor de transcripción y traducción.
