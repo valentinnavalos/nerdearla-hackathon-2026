@@ -83,9 +83,10 @@ class LiveSessionRunner:
             "dispatch_ms_max": 0.0,  # callbacks must never block the receive loop
         }
         self.stats.update(self._rotation_stats)
-        self.config.session_resumption = types.SessionResumptionConfig(
-            transparent=True, handle=resumption_handle
-        )
+        # `transparent=True` is Vertex/Enterprise-only; the Gemini Developer API (this
+        # project's GEMINI_API_KEY) rejects it, so resumption here always needs a
+        # fresh connect + explicit handle rather than a seamless mid-stream swap.
+        self.config.session_resumption = types.SessionResumptionConfig(handle=resumption_handle)
         t_connect = time.monotonic()
         try:
             async with self.client.aio.live.connect(model=self.model, config=self.config) as session:

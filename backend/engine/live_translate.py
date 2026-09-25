@@ -74,8 +74,10 @@ class LiveTranslateEngine(Engine):
         log = logging.LoggerAdapter(logging.getLogger("backend.engine"), {"session": ctx.session_id})
         t_start = time.monotonic()
         orig, trans = Segmenter(idle_s=self.idle_s), Segmenter(idle_s=self.idle_s)
-        # dedupe fallback (T2.1): after any reconnect that isn't a transparent resumption,
-        # the next bit of text on each track may repeat what was already emitted.
+        # dedupe fallback (T2.1): the Gemini Developer API rejects `transparent=True`
+        # (Vertex/Enterprise-only), so every rotation/reconnect here is a fresh connect
+        # + resumption handle, not a seamless mid-stream swap - the next bit of text on
+        # each track may repeat what was already emitted.
         tail = {"orig": "", "trans": ""}
         pending_dedupe = {"orig": False, "trans": False}
 
